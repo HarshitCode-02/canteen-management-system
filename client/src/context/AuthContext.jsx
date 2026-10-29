@@ -1,3 +1,4 @@
+import { disconnectSocket } from "../socket";
 import { createContext, useContext, useEffect, useState } from "react";
 import api from "../api";
 
@@ -20,6 +21,12 @@ export function AuthProvider({ children }) {
       .catch(() => localStorage.removeItem("token"))
       .finally(() => setLoading(false));
   }, []);
+
+  // close the socket when logged out
+  useEffect(() => {
+    if (!user) disconnectSocket();
+  }, [user]);
+
 
   const saveSession = ({ token, user }) => {
     localStorage.setItem("token", token);

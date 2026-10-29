@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import api, { errorMessage } from "../api";
 import useStaffCanteen from "../useStaffCanteen";
 import CanteenSwitcher from "../components/CanteenSwitcher";
+import { connectSocket } from "../socket";
+import { enableSound, beep } from "../sound";
 
 const NEXT = {
   placed: { status: "preparing", label: "Start preparing" },
@@ -26,6 +28,7 @@ export default function Dashboard() {
   const [codes, setCodes] = useState({}); // order id -> code being typed
   const [payNow, setPayNow] = useState({}); // order id -> false if "payment received" unticked
   const { canteens, canteen, canteenId, setCanteenId, error: canteenError } = useStaffCanteen();
+  const [soundOn, setSoundOn] = useState(false);
 
   const load = useCallback(async () => {
     if (!canteenId) return;
@@ -40,14 +43,43 @@ export default function Dashboard() {
     }
   }, [canteenId]);
 
-  // load now, then poll every 10 seconds; reset the list when the canteen changes
+  // load now, then poll every 30 seconds as a fallback; reset the list when the canteen changes
   useEffect(() => {
     setOrders([]);
     setLoading(true);
     load();
-    const timer = setInterval(load, 10000);
+    const timer = setInterval(load, 30000);
     return () => clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!canteenId) return;
+    const socket = connectSocket();
+    if (!socket) return;
+
+    const join = () => socket.emit("joinCanteen", canteenId);
+    if (socket.connected) join();
+    socket.on("connect", join); // rejoin after a dropped connection
+
+    const onNew = (p) => {
+      if (p.canteenId !== canteenId) return;
+      load();
+      beep();
+    };
+    const onUpdated = (p) => {
+      if (p.canteenId !== canteenId) return;
+      load();
+    };
+    socket.on("newOrder", onNew);
+    socket.on("orderUpdated", onUpdated);
+
+    return () => {
+      socket.emit("leaveCanteen", canteenId);
+      socket.off("connect", join);
+      socket.off("newOrder", onNew);
+      socket.off("orderUpdated", onUpdated);
+    };
+  }, [canteenId, load]);
 
   const run = async (order, request) => {
     setBusyId(order._id);
@@ -99,9 +131,15 @@ export default function Dashboard() {
       <div className="dash-head">
         <h2>{canteen?.name} orders ({orders.length})</h2>
         <span className="muted">
-          {newCount} new · refreshes every 10s
+          {newCount} new · live updates
         </span>
       </div>
+
+      {!soundOn && (
+        <button onClick={() => { enableSound(); setSoundOn(true); }}>
+          Enable sound
+        </button>
+      )}
 
       <CanteenSwitcher
         canteens={canteens}

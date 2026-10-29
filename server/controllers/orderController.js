@@ -8,7 +8,7 @@ const FINAL = ["collected", "cancelled", "no_show"];
 const STATUSES = [...ACTIVE, ...FINAL];
 const Canteen = require("../models/Canteen");
 const crypto = require("crypto");
-
+const { notifyOrder } = require("../socket");
 
 // Counter key is today's date in India time, so numbers reset at midnight IST
 const todayKey = () =>
@@ -118,7 +118,7 @@ exports.createOrder = async (req, res, next) => {
       pickupTime: pickup,
       pickupCode: makePickupCode(),
     });
-
+    notifyOrder(order, "newOrder");
     res.status(201).json(order);
   } catch (err) {
     if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
@@ -203,6 +203,7 @@ exports.updateStatus = async (req, res, next) => {
     order.status = status;
     if (status === "ready") order.readyAt = new Date();
     await order.save();
+    notifyOrder(order);
 
     res.json(order);
   } catch (err) {
@@ -227,6 +228,7 @@ exports.cancelOrder = async (req, res, next) => {
 
     order.status = "cancelled";
     await order.save();
+    notifyOrder(order);
     res.json(order);
   } catch (err) {
     next(err);
@@ -270,6 +272,7 @@ exports.verifyAndCollect = async (req, res, next) => {
     order.status = "collected";
     if (paid === true) order.paymentStatus = "paid"; // only when staff say so
     await order.save();
+    notifyOrder(order);
     res.json(publicOrder(order));
   } catch (err) {
     next(err);
@@ -293,6 +296,7 @@ exports.confirmPayment = async (req, res, next) => {
 
     order.paymentStatus = "paid";
     await order.save();
+    notifyOrder(order);
     res.json(order);
   } catch (err) {
     next(err);

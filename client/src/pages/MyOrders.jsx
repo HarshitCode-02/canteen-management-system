@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api, { errorMessage } from "../api";
+import { connectSocket } from "../socket";
+
 
 const LABELS = {
   placed: "Order received",
@@ -61,6 +63,13 @@ function OrderCard({ order, onCancel }) {
   );
 }
 
+{
+  "Notification" in window && Notification.permission === "default" && (
+    <button onClick={() => Notification.requestPermission()}>Enable notifications</button>
+  )
+}
+
+
 export default function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
@@ -81,9 +90,23 @@ export default function MyOrders() {
   // load now, then poll every 10 seconds
   useEffect(() => {
     load();
-    const timer = setInterval(load, 10000);
+    const timer = setInterval(load, 30000);
     return () => clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    const socket = connectSocket();
+    if (!socket) return;
+    const onUpdated = (p) => {
+      load();
+      if (p.status === "ready" && "Notification" in window && Notification.permission === "granted") {
+        new Notification(`Order ${p.orderNumber} is ready!`, { body: "Collect it at the counter." });
+      }
+    };
+    socket.on("orderUpdated", onUpdated);
+    return () => socket.off("orderUpdated", onUpdated);
+  }, [load]);
+
 
   const cancel = async (id) => {
     if (!window.confirm("Cancel this order?")) return;
@@ -103,6 +126,12 @@ export default function MyOrders() {
   return (
     <div>
       {error && <p className="error">{error}</p>}
+
+      {"Notification" in window && Notification.permission === "default" && (
+        <button onClick={() => Notification.requestPermission()}>
+          Enable notifications
+        </button>
+      )}
 
       <h2>Current order</h2>
       {active.length === 0 ? (

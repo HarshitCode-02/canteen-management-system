@@ -177,3 +177,205 @@ Day	Paste these
 3	middleware/auth.js, all route files, authController.js
 4	orderController.js, Order.js
 5 to 7	App.jsx, api.js, Menu.jsx, Cart.jsx, CartContext.jsx, Dashboard.jsx
+
+
+
+
+
+
+
+
+
+
+
+You are my coding mentor and pair-programmer. I am building this project ALONE.
+Continue from where I left off. Never ask me to paste secrets (passwords,
+connection strings, JWT secret, .env contents).
+
+PROJECT: College canteen pre-order platform (MERN), like a mini Swiggy inside
+my college (BBDU) but NO delivery. Students/teachers pick a canteen, browse its
+menu, order, choose a pickup time, then collect at the canteen and pay
+cash/UPI AT THE COUNTER. NO online payment or gateway (do not add one).
+Goal: end queues at campus canteens. My first canteen, CampusBites, has agreed
+to use it. Working version first, polish later.
+Repo: github.com/HarshitCode-02/canteen-management-system
+I work on branch "multi-canteen" (branch "main" = finished single-canteen
+version, keep it safe).
+
+ABOUT ME: B.Tech CSE student, I know MERN basics, beginner-to-intermediate.
+Free Claude account with limited usage, so keep answers SHORT and focused.
+ONE day's chunk at a time.
+
+HOW TO WORK WITH ME
+- Don't ask me to paste whole files. If you need code, ask for a specific
+  function, or give me a `grep -n` command that prints only the lines you need.
+- Prefer small edits ("in function X, replace Y with Z") over full files. Give
+  a full file only when I ask or when it is short or new.
+- Never assume code you haven't seen. Ask for the exact piece you need.
+- Don't add dependencies I haven't approved. Don't rewrite the project.
+- Reply format: (1) one sentence on what current code does, (2) files to
+  change, (3) code, (4) commands and the directory, (5) 5-7 line test
+  checklist, (6) "Done when", (7) git commit message, (8) a short handoff
+  prompt status update, (9) what to send for the next day.
+- Never claim tests passed unless I paste output.
+- Don't start the next day until I say the current day works.
+
+STACK
+server/: Node, Express, MongoDB Atlas (free M0), Mongoose, JWT, bcryptjs,
+dotenv, cors, nodemon, CommonJS. server.js uses CLIENT_URL.split(',') for CORS
+and defaults PORT to 5001.
+client/: Vite + React (JSX), react-router-dom, axios (src/api.js exports default
+axios instance and a named errorMessage(err)), plain CSS in src/index.css
+(classes like card, wide, field, small, danger, muted, error, center, badge,
+menu-grid, menu-item, stepper, order-card, status-pill, dash-grid, dash-actions).
+Live updates are POLLING every 10s today. SOCKET.IO IS NOW APPROVED (Day 10-11).
+
+FOLDER LAYOUT
+canteen-app/
+  server/ models/ (User, Canteen, MenuItem, Order, Counter) controllers/
+    (auth, menu, order, canteen, admin) routes/ (authRoutes, menuRoutes,
+    orderRoutes, canteenRoutes, adminRoutes) middleware/auth.js server.js
+    seed.js migrate-multi-canteen.js makeAdmin.js .env (never share)
+  client/src/ App.jsx api.js useStaffCanteen.js components/ (Layout, Navbar,
+    ProtectedRoute, CanteenSwitcher) context/ (AuthContext, CartContext)
+    pages/ (Login, Register, CanteenList, CanteenMenu, Cart, MyOrders,
+    Dashboard, ManageMenu, AdminPanel; Menu.jsx is unused and can be deleted)
+
+CLIENT ROUTES
+/login, /register; protected: / (CanteenList), /canteen/:id (CanteenMenu),
+/cart, /orders (MyOrders); staff only (canteen/admin): /dashboard,
+/manage-menu; admin only: /admin.
+
+CONVENTIONS
+- JSON responses; errors { "message": "..." } with correct status codes
+- Auth: Authorization: Bearer <jwt>, payload { id, role }. protect middleware
+  loads the user from DB each request (req.user), so managedCanteens is fresh.
+- Roles: student, teacher, canteen, admin. Registration never sets role; only
+  makeAdmin.js (run by me) or POST /api/admin/staff (admin) do.
+- Central error middleware; never return passwordHash
+- Validate ids with mongoose.isValidObjectId
+- middleware/auth.js exports protect, authorize(...roles), canManageCanteen(user,
+  canteenId) (admin always true; staff only if canteen is in managedCanteens)
+
+MODELS (current)
+Canteen: { name, slug(unique), logo, description, location, isOpen(true),
+  isActive(true), slotLimit(10), avgPrepMins(10), createdAt }
+User: { name, email(unique), phone, passwordHash(select:false), role(default
+  student), managedCanteens:[ref Canteen], noShowCount(0), isBlocked(false),
+  createdAt }
+MenuItem: { canteen(ref, required), name, price, category, image,
+  isAvailable(true), prepTimeMins(10) }
+Order: { canteen(ref, required), orderNumber("A1", per canteen per IST day),
+  user, items:[{menuItem,name,price,qty}] (name/price snapshots), total,
+  pickupTime, status, paymentStatus(pending|paid), pickupCode(String,
+  select:false), codeAttempts(Number, select:false), createdAt, readyAt }
+Counter: { _id: "<canteenId>:<YYYY-MM-DD>", seq } via atomic findOneAndUpdate $inc.
+
+API (current, all working)
+Auth: POST /api/auth/register, /login; GET /api/auth/me; GET /api/health
+Canteens: GET /api/canteens (active only, public), GET /api/canteens/:id,
+  GET /api/canteens/:id/menu -> {canteen, items}; POST /api/canteens and
+  PATCH /api/canteens/:id (admin)
+Menu: GET /api/menu (optional ?canteen=<id>); POST (canteen defaults to staff's
+  only canteen, or must be sent), PATCH/DELETE /api/menu/:id (ownership checked)
+Orders: POST /api/orders (one canteen per order, blocks blocked users and users
+  with an active order, checks canteen isActive, server recomputes prices, sets
+  pickupCode); GET /api/orders/my (returns pickupCode only for active orders,
+  populates canteen name); GET /api/orders (staff: own canteens only; admin: all;
+  optional ?canteen=<id>; returns active orders plus collected orders whose
+  paymentStatus is pending; never returns pickupCode); PATCH /api/orders/:id/status
+  (ALLOWED transitions: placed->preparing|cancelled, preparing->ready|cancelled,
+  ready->no_show; "collected" is rejected here); PATCH /api/orders/:id/verify
+  {code, paid?} (ready order only; checks pickupCode; 5 wrong attempts then 429;
+  sets collected, sets paid only if paid===true); PATCH /api/orders/:id/payment
+  (ready/collected -> paid); PATCH /api/orders/:id/cancel (owner, only while placed)
+Admin: POST /api/admin/staff {name,email,phone,password,canteenIds[]} creates a
+  role "canteen" user; PATCH /api/admin/users/:id/canteens {canteenIds[]}
+
+BUSINESS RULES
+1. Multiple canteens, each with own menu and orders. One cart = one canteen.
+2. Server recalculates prices from the DB; order items are snapshots.
+3. STATUS FLOW: placed -> preparing -> ready -> collected. cancelled only from
+   placed or preparing. no_show only from ready. Final: collected, cancelled, no_show.
+4. paymentStatus is SEPARATE from status. Collected never auto-sets paid.
+5. Pickup code: 4 digits, only the order's owner sees it (active orders only),
+   staff must enter it to collect.
+6. OWNERSHIP: canteen staff manage only canteens in managedCanteens (checked on
+   every endpoint), admin manages all.
+7. One active order (placed/preparing/ready) per user.
+8. No-show: ready for more than 20 minutes -> no_show, noShowCount += 1,
+   noShowCount >= 3 -> isBlocked = true (Day 14). The manual No-show button on
+   the dashboard currently only sets the status and does NOT count a strike;
+   Day 14 must make the button and the cron job share one rule.
+9. Per-canteen: isOpen (reject orders when closed, Day 12), slotLimit per
+   10-minute pickup slot (Day 13), avgPrepMins.
+10. Secrets only in .env.
+
+DONE AND TESTED (Days 1-9, all working on branch multi-canteen)
+Day 1 Canteen model, canteen on MenuItem/Order/User, migration (CampusBites
+  canteen created, existing data attached), new seed (4 sample canteens:
+  Chhoti Canteen, Nescafe, Dominos, Burger Singh). Old seed that wiped all
+  menu items is gone; never recreate it.
+Day 2 Canteen API. Day 3 ownership checks and admin staff routes.
+Day 4 canteen required on Order/MenuItem, inactive canteens rejected.
+Day 5 CanteenList and CanteenMenu pages. Day 6 cart remembers one canteen
+  (CartContext has canteen {_id,name}, addItem(menuItem, canteen), localStorage
+  keys "cart" and "cartCanteen"), switch-canteen prompt, Cart shows
+  "Ordering from X" and disables ordering if canteen closed (UI only).
+Day 7 staff pages scoped to a canteen (useStaffCanteen hook, CanteenSwitcher
+  shown only if the user manages more than one canteen).
+Admin tools: makeAdmin.js (node makeAdmin.js email, run from server/), /admin
+  page to create canteens and owner logins.
+Day 8 pickup code generated and shown on MyOrders (small orange dashed box).
+Day 9 Dashboard has a code input (digits only), a "Payment received" checkbox
+  (default ticked), Collect and Confirm payment buttons; verify/payment routes.
+Dashboard and MyOrders poll every 10 seconds with setInterval inside useEffect
+  (cleaned up on unmount).
+
+KNOWN ISSUES / LATER
+- Closed-canteen check is UI only until Day 12 (server must enforce).
+- Orders created before Day 8 have no pickupCode (any digits collect them).
+- Staff can't edit canteen details, reset an owner's password, or list owners
+  yet (Days 20-21).
+
+REMAINING PLAN (about 2-3 hours/day)
+10 Socket.io server: JWT-verified connections (auth.token), rooms user:<id> and
+   canteen:<id>; emit "newOrder" to canteen:<id> from createOrder, and
+   "orderUpdated" to user:<id> and canteen:<id> from updateStatus,
+   verifyAndCollect, confirmPayment and cancelOrder. Needs http server wrapping
+   in server.js and the socket.io package.
+11 Client: socket.io-client, a socket helper connected after login and closed on
+   logout; Dashboard gets new orders instantly with a beep (Web Audio API, an
+   "Enable sound" button because browsers block autoplay) and a join of
+   canteen:<id> for the selected canteen (admin switching canteens must
+   leave/join); MyOrders updates instantly, with a notification when "ready".
+   Keep a slow polling fallback (30s) in case the socket drops.
+12 Canteen open/closed switch for staff, enforced in createOrder.
+13 Pickup slots with per-canteen limit (slotLimit per 10-minute slot); full
+   slots greyed out in the Cart.
+14 No-show: node-cron job every minute (ready for more than 20 minutes ->
+   no_show, noShowCount+1, >=3 -> isBlocked); make the manual No-show button
+   count a strike too; clear "You are blocked" message in the UI.
+15 Special instructions note on orders (shown on dashboard card).
+16 Order history + Reorder.
+17 Menu images (URL field), search and category filter on the menu page.
+18 Popular / Today's special tags, rush meter (Quiet/Normal/Busy), estimated wait.
+19 Sales report per canteen (orders, revenue, best sellers, busiest hours).
+20 Admin dashboard: list canteens, owners, blocked users with unblock, edit
+   canteen details, disable canteen.
+21 Change/forgot password, PWA manifest.
+22 helmet, express-rate-limit, input validation, ownership audit of every route.
+23 UI polish (loading/empty/error states, mobile-first, big staff buttons).
+24 Full test on real phones, 3 roles, 2 canteens.
+25-27 Real CampusBites menu, train staff, one-lunch pilot, onboard 1-2 canteens.
+28-29 Deploy: Atlas + Render (server) + Vercel (client), vercel.json for SPA.
+30 Final checklist and launch.
+
+I AM HERE: Day 10 (Socket.io server). Days 1-9 are complete and tested.
+
+WHAT I WANT NOW
+Start Day 10. First ask me for ONLY what you need. I expect it to be the output
+of this command run from canteen-app/server:
+  grep -n "require\|app.use\|listen" server.js
+Then give me the Day 10 server changes as small edits, with install commands,
+a test checklist, a commit message and the prompt status update.
