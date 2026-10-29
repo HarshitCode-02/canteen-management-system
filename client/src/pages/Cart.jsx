@@ -1,8 +1,34 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import api, { errorMessage } from "../api";
 import { useCart } from "../context/CartContext";
 
+const PICKUP_OPTIONS = [15, 30, 45, 60, 90]; // minutes from now
+
 export default function Cart() {
-  const { items, addItem, decrease, remove, total } = useCart();
+  const { items, addItem, decrease, remove, clearCart, total } = useCart();
+  const navigate = useNavigate();
+  const [minutes, setMinutes] = useState(30);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const placeOrder = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      const pickupTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+      await api.post("/orders", {
+        items: items.map((i) => ({ menuItemId: i.menuItemId, qty: i.qty })),
+        pickupTime,
+      });
+      clearCart();
+      navigate("/orders");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (items.length === 0) {
     return (
@@ -31,12 +57,26 @@ export default function Cart() {
           <button className="small danger" onClick={() => remove(i.menuItemId)}>✕</button>
         </div>
       ))}
+
       <div className="cart-total">
         <span>Total</span>
         <b>₹{total}</b>
       </div>
+
+      <label className="field">
+        I'll pick it up in
+        <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+          {PICKUP_OPTIONS.map((m) => (
+            <option key={m} value={m}>{m} minutes</option>
+          ))}
+        </select>
+      </label>
+
+      {error && <p className="error">{error}</p>}
       <p className="muted">You pay at the counter when you collect.</p>
-      <button disabled>Place order (coming Day 7)</button>
+      <button onClick={placeOrder} disabled={busy}>
+        {busy ? "Placing order..." : "Place order"}
+      </button>
     </div>
   );
 }

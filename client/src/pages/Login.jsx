@@ -16,8 +16,8 @@ export default function Login() {
     setError("");
     setBusy(true);
     try {
-      await login(email, password);
-      navigate("/");
+      const u = await login(email, password);
+      navigate(u.role === "canteen" || u.role === "admin" ? "/dashboard" : "/");
     } catch (err) {
       setError(errorMessage(err));
     } finally {

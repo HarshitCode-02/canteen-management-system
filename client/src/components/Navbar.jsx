@@ -5,6 +5,7 @@ import { useCart } from "../context/CartContext";
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { count, clearCart } = useCart();
+  const isStaff = user.role === "canteen" || user.role === "admin";
 
   const handleLogout = () => {
     clearCart();
@@ -15,6 +16,9 @@ export default function Navbar() {
     <nav className="navbar">
       <Link to="/" className="brand">Canteen</Link>
       <div className="nav-right">
+        {isStaff && <Link to="/dashboard">Dashboard</Link>}
+        {isStaff && <Link to="/manage-menu">Manage Menu</Link>}
+        <Link to="/orders">My Orders</Link>
         <Link to="/cart">Cart ({count})</Link>
         <span className="nav-user">{user.name}</span>
         <button className="small" onClick={handleLogout}>Logout</button>
