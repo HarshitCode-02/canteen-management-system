@@ -34,3 +34,10 @@ exports.authorize = (...roles) => (req, res, next) => {
   }
   next();
 };
+
+// Can this user manage this canteen? Admin: always. Canteen staff: only their own.
+exports.canManageCanteen = (user, canteenId) => {
+  if (!user || !canteenId) return false;
+  if (user.role === "admin") return true;
+  return (user.managedCanteens || []).some((id) => String(id) === String(canteenId));
+};

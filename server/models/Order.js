@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema({
+  canteen: { type: mongoose.Schema.Types.ObjectId, ref: "Canteen" },
   orderNumber: { type: String, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   items: [
@@ -20,10 +21,13 @@ const orderSchema = new mongoose.Schema({
     default: "placed",
   },
   paymentStatus: { type: String, enum: ["pending", "paid"], default: "pending" },
+  // generated on Day 8; never returned unless explicitly selected
+  pickupCode: { type: String, select: false },
   createdAt: { type: Date, default: Date.now },
   readyAt: { type: Date },
 });
 
 orderSchema.index({ user: 1, status: 1 });
+orderSchema.index({ canteen: 1, status: 1 });
 
 module.exports = mongoose.model("Order", orderSchema);

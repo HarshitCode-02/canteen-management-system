@@ -11,9 +11,9 @@ const STATUSES = [...ACTIVE, ...FINAL];
 const todayKey = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
-const nextOrderNumber = async () => {
+const nextOrderNumber = async (canteenId) => {
   const counter = await Counter.findOneAndUpdate(
-    { _id: todayKey() },
+    { _id: `${canteenId}:${todayKey()}` },
     { $inc: { seq: 1 } },
     { upsert: true, returnDocument: "after" }
   );
@@ -66,6 +66,12 @@ exports.createOrder = async (req, res, next) => {
     if (soldOut.length > 0) {
       return res.status(400).json({ message: `Sold out: ${soldOut.map((m) => m.name).join(", ")}` });
     }
+    // all items must belong to exactly one canteen
+    const canteenIds = new Set(menuItems.map((m) => String(m.canteen)));
+    if (!menuItems[0].canteen || canteenIds.size !== 1) {
+      return res.status(400).json({ message: "All items must be from the same canteen" });
+    }
+    const canteenId = menuItems[0].canteen;
 
     // prices come from the DB, never from the client
     const orderItems = menuItems.map((m) => ({
@@ -77,7 +83,8 @@ exports.createOrder = async (req, res, next) => {
     const total = orderItems.reduce((sum, i) => sum + i.price * i.qty, 0);
 
     const order = await Order.create({
-      orderNumber: await nextOrderNumber(),
+      canteen: canteenId,
+      orderNumber: await nextOrderNumber(canteenId),
       user: req.user._id,
       items: orderItems,
       total,
