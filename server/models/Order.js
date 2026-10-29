@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema({
-  canteen: { type: mongoose.Schema.Types.ObjectId, ref: "Canteen" },
+  canteen: { type: mongoose.Schema.Types.ObjectId, ref: "Canteen", required: true },
   orderNumber: { type: String, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   items: [
@@ -23,6 +23,7 @@ const orderSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ["pending", "paid"], default: "pending" },
   // generated on Day 8; never returned unless explicitly selected
   pickupCode: { type: String, select: false },
+  codeAttempts: { type: Number, default: 0, select: false },
   createdAt: { type: Date, default: Date.now },
   readyAt: { type: Date },
 });

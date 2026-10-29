@@ -24,6 +24,15 @@ function OrderCard({ order, onCancel }) {
         <h3>#{order.orderNumber}</h3>
         <span className="status-pill">{LABELS[order.status]}</span>
       </div>
+      {order.canteen?.name && <p className="muted">{order.canteen.name}</p>}
+
+      {order.pickupCode && (
+        <div className="pickup-code">
+          <span>Pickup code</span>
+          <b>{order.pickupCode}</b>
+          <small>Show this at the counter</small>
+        </div>
+      )}
 
       {order.status === "ready" && (
         <p className="ready-banner">

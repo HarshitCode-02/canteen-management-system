@@ -17,6 +17,7 @@ export default function Navbar() {
       <Link to="/" className="brand">Canteen</Link>
       <div className="nav-right">
         {isStaff && <Link to="/dashboard">Dashboard</Link>}
+        {user.role === "admin" && <Link to="/admin">Admin</Link>}
         {isStaff && <Link to="/manage-menu">Manage Menu</Link>}
         <Link to="/orders">My Orders</Link>
         <Link to="/cart">Cart ({count})</Link>

@@ -6,10 +6,32 @@ const { canManageCanteen } = require("../middleware/auth");
 const ACTIVE = ["placed", "preparing", "ready"];
 const FINAL = ["collected", "cancelled", "no_show"];
 const STATUSES = [...ACTIVE, ...FINAL];
+const Canteen = require("../models/Canteen");
+const crypto = require("crypto");
+
 
 // Counter key is today's date in India time, so numbers reset at midnight IST
 const todayKey = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+// 4-digit code, e.g. "0427". crypto.randomInt is secure, unlike Math.random.
+const makePickupCode = () => String(crypto.randomInt(0, 10000)).padStart(4, "0");
+const MAX_CODE_ATTEMPTS = 5;
+
+// allowed status changes through updateStatus ("collected" goes through the code check)
+const ALLOWED = {
+  placed: ["preparing", "cancelled"],
+  preparing: ["ready", "cancelled"],
+  ready: ["no_show"],
+};
+
+// never send the code or attempt counter to staff
+const publicOrder = (order) => {
+  const obj = order.toObject();
+  delete obj.pickupCode;
+  delete obj.codeAttempts;
+  return obj;
+};
 
 const nextOrderNumber = async (canteenId) => {
   const counter = await Counter.findOneAndUpdate(
@@ -73,6 +95,11 @@ exports.createOrder = async (req, res, next) => {
     }
     const canteenId = menuItems[0].canteen;
 
+    const canteen = await Canteen.findOne({ _id: canteenId, isActive: true });
+    if (!canteen) {
+      return res.status(400).json({ message: "This canteen is not available" });
+    }
+
     // prices come from the DB, never from the client
     const orderItems = menuItems.map((m) => ({
       menuItem: m._id,
@@ -89,6 +116,7 @@ exports.createOrder = async (req, res, next) => {
       items: orderItems,
       total,
       pickupTime: pickup,
+      pickupCode: makePickupCode(),
     });
 
     res.status(201).json(order);
@@ -101,8 +129,17 @@ exports.createOrder = async (req, res, next) => {
 // GET /api/orders/my
 exports.getMyOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
-    res.json(orders);
+    const orders = await Order.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .select("+pickupCode")
+      .populate("canteen", "name");
+
+    const result = orders.map((o) => {
+      const obj = o.toObject();
+      if (!ACTIVE.includes(o.status)) delete obj.pickupCode;
+      return obj;
+    });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -112,7 +149,10 @@ exports.getMyOrders = async (req, res, next) => {
 // Staff: only their canteens. Admin: all, or one with ?canteen=
 exports.getActiveOrders = async (req, res, next) => {
   try {
-    const filter = { status: { $in: ACTIVE } };
+    // active orders, plus collected orders still waiting for payment
+    const filter = {
+      $or: [{ status: { $in: ACTIVE } }, { status: "collected", paymentStatus: "pending" }],
+    };
     const requested = req.query.canteen;
 
     if (requested !== undefined) {
@@ -129,7 +169,8 @@ exports.getActiveOrders = async (req, res, next) => {
 
     const orders = await Order.find(filter)
       .sort({ createdAt: 1 })
-      .populate("user", "name phone");
+      .populate("user", "name phone")
+      .populate("canteen", "name");
     res.json(orders);
   } catch (err) {
     next(err);
@@ -146,19 +187,21 @@ exports.updateStatus = async (req, res, next) => {
     if (!STATUSES.includes(status)) {
       return res.status(400).json({ message: `status must be one of: ${STATUSES.join(", ")}` });
     }
+    if (status === "collected") {
+      return res.status(400).json({ message: "Enter the pickup code to collect an order" });
+    }
 
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
     if (!canManageCanteen(req.user, order.canteen)) {
       return res.status(403).json({ message: "This order belongs to another canteen" });
     }
-    if (FINAL.includes(order.status)) {
-      return res.status(400).json({ message: `Order is already ${order.status}` });
+    if (!(ALLOWED[order.status] || []).includes(status)) {
+      return res.status(400).json({ message: `Cannot change an order from ${order.status} to ${status}` });
     }
 
     order.status = status;
     if (status === "ready") order.readyAt = new Date();
-    if (status === "collected") order.paymentStatus = "paid"; // changes on Day 9
     await order.save();
 
     res.json(order);
@@ -183,6 +226,72 @@ exports.cancelOrder = async (req, res, next) => {
     }
 
     order.status = "cancelled";
+    await order.save();
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PATCH /api/orders/:id/verify  body: { code, paid? }  (staff of that canteen, or admin)
+exports.verifyAndCollect = async (req, res, next) => {
+  try {
+    const { code, paid } = req.body;
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+    const order = await Order.findById(req.params.id).select("+pickupCode +codeAttempts");
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canManageCanteen(req.user, order.canteen)) {
+      return res.status(403).json({ message: "This order belongs to another canteen" });
+    }
+    if (order.status !== "ready") {
+      return res.status(400).json({ message: "Only ready orders can be collected" });
+    }
+
+    // orders placed before pickup codes existed have no code, so skip the check
+    if (order.pickupCode) {
+      const attempts = order.codeAttempts || 0;
+      if (attempts >= MAX_CODE_ATTEMPTS) {
+        return res.status(429).json({
+          message: "Too many wrong codes for this order. Mark it as no-show or call the student.",
+        });
+      }
+      if (String(code || "").trim() !== order.pickupCode) {
+        order.codeAttempts = attempts + 1;
+        await order.save();
+        const left = MAX_CODE_ATTEMPTS - order.codeAttempts;
+        return res.status(400).json({
+          message: left > 0 ? `Wrong code. ${left} attempts left.` : "Wrong code. No attempts left.",
+        });
+      }
+    }
+
+    order.status = "collected";
+    if (paid === true) order.paymentStatus = "paid"; // only when staff say so
+    await order.save();
+    res.json(publicOrder(order));
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PATCH /api/orders/:id/payment  (staff of that canteen, or admin)
+exports.confirmPayment = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canManageCanteen(req.user, order.canteen)) {
+      return res.status(403).json({ message: "This order belongs to another canteen" });
+    }
+    if (!["ready", "collected"].includes(order.status)) {
+      return res.status(400).json({ message: "Payment can only be confirmed for ready or collected orders" });
+    }
+
+    order.paymentStatus = "paid";
     await order.save();
     res.json(order);
   } catch (err) {

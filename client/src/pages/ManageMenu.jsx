@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api, { errorMessage } from "../api";
+import useStaffCanteen from "../useStaffCanteen";
+import CanteenSwitcher from "../components/CanteenSwitcher";
 
 const EMPTY_FORM = { name: "", price: "", category: "", prepTimeMins: 10 };
 
@@ -10,10 +12,12 @@ export default function ManageMenu() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const { canteens, canteen, canteenId, setCanteenId, error: canteenError } = useStaffCanteen();
 
   const load = useCallback(async () => {
+    if (!canteenId) return;
     try {
-      const res = await api.get("/menu");
+      const res = await api.get("/menu", { params: { canteen: canteenId } });
       setMenu(res.data);
       setError("");
     } catch (err) {
@@ -21,41 +25,55 @@ export default function ManageMenu() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canteenId]);
 
   useEffect(() => {
+    setMenu([]);
+    setDrafts({});
+    setLoading(true);
     load();
   }, [load]);
 
-  const update = async (id, changes) => {
-    setBusyId(id);
+  const replaceItem = (updated) =>
+    setMenu((prev) => prev.map((m) => (m._id === updated._id ? updated : m)));
+
+  const patchItem = async (item, changes) => {
+    setBusyId(item._id);
     setError("");
     try {
-      const res = await api.patch(`/menu/${id}`, changes);
-      setMenu((prev) => prev.map((m) => (m._id === id ? res.data : m)));
-      setDrafts((prev) => {
-        const { [id]: _removed, ...rest } = prev;
-        return rest;
-      });
+      const res = await api.patch(`/menu/${item._id}`, changes);
+      replaceItem(res.data);
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     } finally {
       setBusyId(null);
     }
   };
 
-  const savePrice = (item) => {
+  const toggleAvailable = (item) => patchItem(item, { isAvailable: !item.isAvailable });
+
+  const savePrice = async (item) => {
     const price = Number(drafts[item._id]);
     if (!Number.isFinite(price) || price < 0) {
       setError("Enter a valid price");
       return;
     }
-    update(item._id, { price });
+    const ok = await patchItem(item, { price });
+    if (ok) {
+      setDrafts((d) => {
+        const copy = { ...d };
+        delete copy[item._id];
+        return copy;
+      });
+    }
   };
 
-  const remove = async (item) => {
-    if (!window.confirm(`Delete ${item.name} from the menu?`)) return;
+  const removeItem = async (item) => {
+    if (!window.confirm(`Delete "${item.name}"?`)) return;
     setBusyId(item._id);
+    setError("");
     try {
       await api.delete(`/menu/${item._id}`);
       setMenu((prev) => prev.filter((m) => m._id !== item._id));
@@ -69,88 +87,124 @@ export default function ManageMenu() {
   const addItem = async (e) => {
     e.preventDefault();
     setError("");
+    const price = Number(form.price);
+    if (!form.name.trim() || !form.category.trim() || !Number.isFinite(price) || price < 0) {
+      setError("Name, category and a valid price are required");
+      return;
+    }
+    setBusyId("new");
     try {
-      await api.post("/menu", {
-        name: form.name,
-        price: Number(form.price),
-        category: form.category,
+      const res = await api.post("/menu", {
+        canteen: canteenId,
+        name: form.name.trim(),
+        category: form.category.trim(),
+        price,
         prepTimeMins: Number(form.prepTimeMins) || 10,
       });
+      setMenu((prev) => [...prev, res.data]);
       setForm(EMPTY_FORM);
-      load();
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const setField = (f) => (e) => setForm({ ...form, [f]: e.target.value });
-
+  if (canteenError) return <p className="error">{canteenError}</p>;
   if (loading) return <p className="center">Loading menu...</p>;
 
-  const categories = [...new Set(menu.map((m) => m.category))];
+  const sorted = [...menu].sort(
+    (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
+  );
 
   return (
     <div>
-      <h2>Manage menu</h2>
+      <h2>{canteen?.name} menu</h2>
+      <CanteenSwitcher canteens={canteens} canteenId={canteenId} onChange={setCanteenId} />
+
       {error && <p className="error">{error}</p>}
 
-      <form className="add-form" onSubmit={addItem}>
-        <input placeholder="Item name" value={form.name} onChange={setField("name")} required />
-        <input type="number" min="0" placeholder="Price ₹" value={form.price}
-          onChange={setField("price")} required />
-        <input list="cats" placeholder="Category" value={form.category}
-          onChange={setField("category")} required />
-        <datalist id="cats">
-          {categories.map((c) => <option key={c} value={c} />)}
-        </datalist>
-        <input type="number" min="0" placeholder="Prep mins" value={form.prepTimeMins}
-          onChange={setField("prepTimeMins")} />
-        <button>Add item</button>
+      <form className="card wide" onSubmit={addItem}>
+        <h3>Add item</h3>
+        <label className="field">
+          Name
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          Category
+          <input
+            value={form.category}
+            placeholder="Snacks, Meals, Beverages..."
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          Price (₹)
+          <input
+            type="number"
+            min="0"
+            value={form.price}
+            onChange={(e) => setForm({ ...form, price: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          Prep time (minutes)
+          <input
+            type="number"
+            min="0"
+            value={form.prepTimeMins}
+            onChange={(e) => setForm({ ...form, prepTimeMins: e.target.value })}
+          />
+        </label>
+        <button type="submit" disabled={busyId === "new"}>
+          {busyId === "new" ? "Adding..." : "Add item"}
+        </button>
       </form>
 
-      {menu.length === 0 && <p className="muted">No items yet. Add your first one above.</p>}
-
-      {categories.map((cat) => (
-        <section key={cat}>
-          <h3>{cat}</h3>
-          {menu
-            .filter((m) => m.category === cat)
-            .map((m) => {
-              const draft = drafts[m._id];
-              const changed = draft !== undefined && Number(draft) !== m.price;
-              const busy = busyId === m._id;
-              return (
-                <div key={m._id} className={`manage-row ${m.isAvailable ? "" : "soldout"}`}>
-                  <b className="manage-name">{m.name}</b>
-                  <div className="price-edit">
-                    ₹
+      {sorted.length === 0 ? (
+        <p className="muted">No items yet. Add your first item above.</p>
+      ) : (
+        <div className="menu-grid">
+          {sorted.map((m) => {
+            const busy = busyId === m._id;
+            const draft = drafts[m._id];
+            const editing = draft !== undefined && String(draft) !== String(m.price);
+            return (
+              <div key={m._id} className={`menu-item ${m.isAvailable ? "" : "soldout"}`}>
+                <div>
+                  <h3>{m.name}</h3>
+                  <p className="muted">{m.category} · ~{m.prepTimeMins} min</p>
+                  <label className="field">
+                    Price (₹)
                     <input
                       type="number"
                       min="0"
-                      value={draft ?? m.price}
+                      value={draft !== undefined ? draft : m.price}
                       onChange={(e) => setDrafts({ ...drafts, [m._id]: e.target.value })}
                     />
-                    {changed && (
-                      <button className="small" disabled={busy} onClick={() => savePrice(m)}>
-                        Save
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    className={`small ${m.isAvailable ? "" : "ok"}`}
-                    disabled={busy}
-                    onClick={() => update(m._id, { isAvailable: !m.isAvailable })}
-                  >
+                  </label>
+                </div>
+                <div className="dash-actions">
+                  {editing && (
+                    <button className="small" disabled={busy} onClick={() => savePrice(m)}>
+                      Save price
+                    </button>
+                  )}
+                  <button className="small" disabled={busy} onClick={() => toggleAvailable(m)}>
                     {m.isAvailable ? "Mark sold out" : "Mark available"}
                   </button>
-                  <button className="small danger" disabled={busy} onClick={() => remove(m)}>
-                    ✕
+                  <button className="small danger" disabled={busy} onClick={() => removeItem(m)}>
+                    Delete
                   </button>
                 </div>
-              );
-            })}
-        </section>
-      ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
