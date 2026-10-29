@@ -62,17 +62,20 @@ exports.createItem = async (req, res, next) => {
   }
 };
 
-// PATCH /api/menu/:id  (ownership check comes on Day 3)
+// PATCH /api/menu/:id  (staff: own canteen only; admin: any)
 exports.updateItem = async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid item id" });
     }
-    const item = await MenuItem.findByIdAndUpdate(req.params.id, pick(req.body), {
-      new: true,
-      runValidators: true,
-    });
+    const item = await MenuItem.findById(req.params.id);
     if (!item) return res.status(404).json({ message: "Menu item not found" });
+    if (!canManageCanteen(req.user, item.canteen)) {
+      return res.status(403).json({ message: "You cannot manage this canteen" });
+    }
+
+    Object.assign(item, pick(req.body)); // pick() never includes "canteen"
+    await item.save();
     res.json(item);
   } catch (err) {
     if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
@@ -80,14 +83,19 @@ exports.updateItem = async (req, res, next) => {
   }
 };
 
-// DELETE /api/menu/:id  (ownership check comes on Day 3)
+// DELETE /api/menu/:id  (staff: own canteen only; admin: any)
 exports.deleteItem = async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid item id" });
     }
-    const item = await MenuItem.findByIdAndDelete(req.params.id);
+    const item = await MenuItem.findById(req.params.id);
     if (!item) return res.status(404).json({ message: "Menu item not found" });
+    if (!canManageCanteen(req.user, item.canteen)) {
+      return res.status(403).json({ message: "You cannot manage this canteen" });
+    }
+
+    await item.deleteOne();
     res.json({ message: "Menu item deleted" });
   } catch (err) {
     next(err);

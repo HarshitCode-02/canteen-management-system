@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const MenuItem = require("../models/MenuItem");
 const Counter = require("../models/Counter");
-
+const { canManageCanteen } = require("../middleware/auth");
 const ACTIVE = ["placed", "preparing", "ready"];
 const FINAL = ["collected", "cancelled", "no_show"];
 const STATUSES = [...ACTIVE, ...FINAL];
@@ -108,10 +108,26 @@ exports.getMyOrders = async (req, res, next) => {
   }
 };
 
-// GET /api/orders  (canteen/admin)
+// GET /api/orders  (canteen/admin)  optional ?canteen=<id>
+// Staff: only their canteens. Admin: all, or one with ?canteen=
 exports.getActiveOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({ status: { $in: ACTIVE } })
+    const filter = { status: { $in: ACTIVE } };
+    const requested = req.query.canteen;
+
+    if (requested !== undefined) {
+      if (!mongoose.isValidObjectId(requested)) {
+        return res.status(400).json({ message: "Invalid canteen id" });
+      }
+      if (!canManageCanteen(req.user, requested)) {
+        return res.status(403).json({ message: "You cannot manage this canteen" });
+      }
+      filter.canteen = requested;
+    } else if (req.user.role !== "admin") {
+      filter.canteen = { $in: req.user.managedCanteens };
+    }
+
+    const orders = await Order.find(filter)
       .sort({ createdAt: 1 })
       .populate("user", "name phone");
     res.json(orders);
@@ -120,7 +136,7 @@ exports.getActiveOrders = async (req, res, next) => {
   }
 };
 
-// PATCH /api/orders/:id/status  (canteen/admin)
+// PATCH /api/orders/:id/status  (staff of that canteen, or admin)
 exports.updateStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
@@ -133,13 +149,16 @@ exports.updateStatus = async (req, res, next) => {
 
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canManageCanteen(req.user, order.canteen)) {
+      return res.status(403).json({ message: "This order belongs to another canteen" });
+    }
     if (FINAL.includes(order.status)) {
       return res.status(400).json({ message: `Order is already ${order.status}` });
     }
 
     order.status = status;
     if (status === "ready") order.readyAt = new Date();
-    if (status === "collected") order.paymentStatus = "paid";
+    if (status === "collected") order.paymentStatus = "paid"; // changes on Day 9
     await order.save();
 
     res.json(order);

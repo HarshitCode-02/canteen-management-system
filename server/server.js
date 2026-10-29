@@ -25,6 +25,9 @@ app.use("/api/orders", orderRoutes);
 const canteenRoutes = require("./routes/canteenRoutes");
 app.use("/api/canteens", canteenRoutes);
 
+const adminRoutes = require("./routes/adminRoutes");
+app.use("/api/admin", adminRoutes);
+
 // 404 handler for unknown routes
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
