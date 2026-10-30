@@ -461,3 +461,170 @@ button.ok {
   background: #f97316;
   color: #fff;
 }
+.rush {
+  font-size: 13px;
+  font-weight: 600;
+}
+.rush-Quiet {
+  color: #16a34a;
+}
+.rush-Normal {
+  color: #d97706;
+}
+.rush-Busy {
+  color: #dc2626;
+}
+.badge.special {
+  background: #fef3c7;
+  color: #92400e;
+}
+.badge.popular {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.sales-report h1 {
+  margin-bottom: 4px;
+}
+.sales-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 12px 0 20px;
+}
+.sales-card,
+.sales-panel {
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.sales-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sales-card strong {
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.sales-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.sales-panel h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+.sales-best-list,
+.sales-hours {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sales-best-list li,
+.sales-hours li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid #eee;
+}
+.sales-best-list li:last-child,
+.sales-hours li:last-child {
+  border-bottom: 0;
+}
+.sales-best-list li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sales-best-list small {
+  font-size: 13px;
+}
+.sales-hours li {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 28px;
+}
+.sales-bar-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f1f1f1;
+}
+.sales-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #e65100;
+}
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.admin-card {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.admin-card h4,
+.admin-card p {
+  overflow-wrap: anywhere;
+}
+.admin-card .field {
+  margin: 8px 0;
+}
+.admin-number-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.admin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.admin-toggle input {
+  width: 20px;
+  height: 20px;
+}
+.account-card {
+  max-width: 480px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .navbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .nav-right {
+    width: 100%;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 2px 0 6px;
+    white-space: nowrap;
+  }
+  .nav-user {
+    display: none;
+  }
+  .container {
+    padding: 12px;
+  }
+  .dash-actions button,
+  .order-card button {
+    min-height: 44px;
+  }
+}

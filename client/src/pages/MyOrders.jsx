@@ -126,7 +126,12 @@ function OrderCard({ order, onCancel }) {
       {order.note && <p className="muted">Note: {order.note}</p>}
 
       {order.status === "no_show" && (
-        <p className="error">You did not collect this order.</p>
+        <p className="error">
+          You did not collect this order.{" "}
+          {order.paymentStatus === "paid"
+            ? "Payment has been recorded."
+            : `Pay ₹${order.total} at the canteen counter; staff must record the payment before unblocking your account.`}
+        </p>
       )}
 
       {order.pickupCode && (
@@ -273,8 +278,9 @@ export default function MyOrders() {
         <div className="blocked-banner">
           <b>You are blocked from placing orders.</b>
           <p>
-            You did not collect an order from {canteenNames || "the canteen"}. Pay the
-            fine at that canteen's counter and ask the staff to unblock you.
+            You did not collect an order from {canteenNames || "the canteen"}. Pay the full
+            no-show order amount at that canteen's counter. Staff must record the payment
+            before they can unblock your account.
           </p>
         </div>
       )}

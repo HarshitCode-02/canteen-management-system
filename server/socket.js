@@ -17,8 +17,11 @@ function initSocket(server) {
       const token = socket.handshake.auth && socket.handshake.auth.token;
       if (!token) return next(new Error('No token'));
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(payload.id);
+      const user = await User.findById(payload.id).select('+tokenVersion');
       if (!user) return next(new Error('User not found'));
+      if ((payload.tokenVersion || 0) !== (user.tokenVersion || 0)) {
+        return next(new Error('Password changed; please sign in again'));
+      }
       socket.user = user;
       next();
     } catch (err) {
@@ -54,6 +57,9 @@ function emitToUser(userId, event, payload) {
 function emitToCanteen(canteenId, event, payload) {
   if (io) io.to(`canteen:${canteenId}`).emit(event, payload);
 }
+function revokeUserSockets(userId) {
+  if (io) io.in(`user:${userId}`).disconnectSockets(true);
+}
 function notifyOrder(order, event = 'orderUpdated') {
   const canteenId = String(order.canteen._id || order.canteen);
   const userId = String(order.user._id || order.user);
@@ -69,4 +75,4 @@ function notifyOrder(order, event = 'orderUpdated') {
   if (event === 'orderUpdated') emitToUser(userId, event, payload);
 }
 
-module.exports = { initSocket, emitToUser, emitToCanteen, notifyOrder };
+module.exports = { initSocket, emitToUser, emitToCanteen, revokeUserSockets, notifyOrder };

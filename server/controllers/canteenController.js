@@ -21,11 +21,32 @@ const pick = (body) =>
 const slugify = (s) =>
   String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
+
+// rush = number of orders currently placed/preparing at the canteen
+async function loadFor(canteenIds) {
+  const rows = await Order.aggregate([
+    { $match: { canteen: { $in: canteenIds }, status: { $in: ["placed", "preparing"] } } },
+    { $group: { _id: "$canteen", n: { $sum: 1 } } },
+  ]);
+  const map = {};
+  rows.forEach((r) => (map[String(r._id)] = r.n));
+  return map;
+}
+const rushLevel = (n) => (n <= 2 ? "Quiet" : n <= 6 ? "Normal" : "Busy");
+const waitMins = (c, n) => Math.max(5, Math.round((c.avgPrepMins + n * 2) / 5) * 5);
+
+
 // GET /api/canteens  (public, active canteens only)
 exports.getCanteens = async (req, res, next) => {
   try {
     const canteens = await Canteen.find({ isActive: true }).sort({ name: 1 });
-    res.json(canteens);
+    const load = await loadFor(canteens.map((c) => c._id));
+    res.json(
+      canteens.map((c) => {
+        const n = load[String(c._id)] || 0;
+        return { ...c.toObject(), rush: rushLevel(n), waitMins: waitMins(c, n) };
+      })
+    );
   } catch (err) {
     next(err);
   }
@@ -54,8 +75,26 @@ exports.getCanteenMenu = async (req, res, next) => {
     const canteen = await Canteen.findOne({ _id: req.params.id, isActive: true });
     if (!canteen) return res.status(404).json({ message: "Canteen not found" });
 
-    const items = await MenuItem.find({ canteen: canteen._id }).sort({ category: 1, name: 1 });
-    res.json({ canteen, items });
+    const found = await MenuItem.find({ canteen: canteen._id }).sort({ category: 1, name: 1 });
+
+    // Popular = ordered 3+ times in the last 7 days, top 3 items
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const top = await Order.aggregate([
+      { $match: { canteen: canteen._id, createdAt: { $gte: since }, status: { $ne: "cancelled" } } },
+      { $unwind: "$items" },
+      { $group: { _id: "$items.menuItem", qty: { $sum: "$items.qty" } } },
+      { $match: { qty: { $gte: 3 } } },
+      { $sort: { qty: -1 } },
+      { $limit: 3 },
+    ]);
+    const popular = new Set(top.map((t) => String(t._id)));
+    const items = found.map((i) => ({ ...i.toObject(), isPopular: popular.has(String(i._id)) }));
+
+    const n = (await loadFor([canteen._id]))[String(canteen._id)] || 0;
+    res.json({
+      canteen: { ...canteen.toObject(), rush: rushLevel(n), waitMins: waitMins(canteen, n) },
+      items,
+    });
   } catch (err) {
     next(err);
   }
@@ -174,7 +213,7 @@ exports.getBlockedUsers = async (req, res, next) => {
       user: { $in: users.map((u) => u._id) },
     })
       .sort({ createdAt: -1 })
-      .select("user orderNumber total pickupTime createdAt");
+      .select("user orderNumber total pickupTime createdAt paymentStatus");
 
     res.json(
       users.map((u) => ({
@@ -205,6 +244,17 @@ exports.unblockUser = async (req, res, next) => {
     if (!hadNoShow) {
       return res.status(403).json({ message: "This student has no no-show at your canteen" });
     }
+    const unpaidNoShow = await Order.exists({
+      canteen: id,
+      user: userId,
+      status: "no_show",
+      paymentStatus: { $ne: "paid" },
+    });
+    if (unpaidNoShow) {
+      return res.status(409).json({
+        message: "Confirm the counter payment for every no-show order at this canteen before unblocking the student",
+      });
+    }
     const user = await User.findOneAndUpdate(
       { _id: userId, isBlocked: true },
       { isBlocked: false, noShowCount: 0, $unset: { blockedAt: 1 } },
@@ -219,4 +269,3 @@ exports.unblockUser = async (req, res, next) => {
     next(err);
   }
 };
-

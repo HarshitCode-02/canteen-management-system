@@ -53,6 +53,7 @@ export default function ManageMenu() {
   };
 
   const toggleAvailable = (item) => patchItem(item, { isAvailable: !item.isAvailable });
+  const toggleSpecial = (m) => patchItem(m, { isSpecial: !m.isSpecial });
 
   const savePrice = async (item) => {
     const price = Number(drafts[item._id]);
@@ -203,6 +204,9 @@ export default function ManageMenu() {
                       Save price
                     </button>
                   )}
+                  <button className="small" disabled={busy} onClick={() => toggleSpecial(m)}>
+                    {m.isSpecial ? "Remove special" : "Today's special"}
+                  </button>
                   <button className="small" disabled={busy} onClick={() => toggleAvailable(m)}>
                     {m.isAvailable ? "Mark sold out" : "Mark available"}
                   </button>

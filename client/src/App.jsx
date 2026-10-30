@@ -11,6 +11,8 @@ import Dashboard from "./pages/Dashboard";
 import ManageMenu from "./pages/ManageMenu";
 import AdminPanel from "./pages/AdminPanel";
 import BlockedStudents from "./pages/BlockedStudents";
+import SalesReport from "./pages/SalesReport";
+import AccountSettings from "./pages/AccountSettings";
 
 
 
@@ -24,6 +26,7 @@ export default function App() {
         <Route path="/canteen/:id" element={<CanteenMenu />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/orders" element={<MyOrders />} />
+        <Route path="/account" element={<AccountSettings />} />
         <Route
           path="/admin"
           element={
@@ -53,6 +56,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["canteen", "admin"]}>
               <BlockedStudents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <ProtectedRoute roles={["canteen", "admin"]}>
+              <SalesReport />
             </ProtectedRoute>
           }
         />

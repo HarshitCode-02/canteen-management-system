@@ -12,7 +12,11 @@ app.use(express.json());
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK' });
+  const databaseReady = mongoose.connection.readyState === 1;
+  res.status(databaseReady ? 200 : 503).json({
+    status: databaseReady ? 'OK' : 'UNAVAILABLE',
+    database: databaseReady ? 'connected' : 'disconnected',
+  });
 });
 
 const menuRoutes = require("./routes/menuRoutes");

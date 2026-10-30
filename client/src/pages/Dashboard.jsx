@@ -264,7 +264,7 @@ export default function Dashboard() {
                       className="small danger"
                       disabled={busy}
                       onClick={() =>
-                        setStatus(o, "no_show", `Mark #${o.orderNumber} as no-show? The student will be blocked until staff unblock them.`)
+                        setStatus(o, "no_show", `Mark #${o.orderNumber} as no-show? The student will be blocked immediately and must pay the full order amount at the counter before staff can unblock them.`)
                       }
                     >
                       No-show
@@ -275,7 +275,7 @@ export default function Dashboard() {
                       className="small danger"
                       disabled={busy}
                       onClick={() =>
-                        setStatus(o, "cancelled", `Cancel #${o.orderNumber}? The student will be blocked until staff unblock them.`)
+                        setStatus(o, "cancelled", `Cancel #${o.orderNumber}?`)
                       }
                     >
                       Cancel

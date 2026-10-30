@@ -3,7 +3,7 @@ const MenuItem = require("../models/MenuItem");
 const Canteen = require("../models/Canteen");
 const { canManageCanteen } = require("../middleware/auth");
 
-const FIELDS = ["name", "price", "category", "image", "isAvailable", "prepTimeMins"];
+const FIELDS = ["name", "price", "category", "image", "isAvailable","isSpecial", "prepTimeMins"];
 
 const pick = (body) =>
   FIELDS.reduce((acc, f) => {

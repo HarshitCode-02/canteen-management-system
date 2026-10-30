@@ -33,7 +33,11 @@ export default function BlockedStudents() {
   }, [load]);
 
   const unblock = async (s) => {
-    if (!window.confirm(`Has ${s.name} paid the fine? This will unblock them.`)) return;
+    if (s.noShowOrders.some((order) => order.paymentStatus !== "paid")) {
+      setError("Record payment for every no-show order before unblocking this student.");
+      return;
+    }
+    if (!window.confirm(`Confirm that ${s.name} has paid the full amount for every no-show order at the counter, then unblock them?`)) return;
     setBusyId(s._id);
     try {
       await api.patch(`/canteens/${canteenId}/unblock/${s._id}`);
@@ -65,14 +69,41 @@ export default function BlockedStudents() {
                 {s.phone && <a href={`tel:${s.phone}`}>{s.phone}</a>}
                 {s.blockedAt && <span className="muted"> · blocked {fmtDate(s.blockedAt)}</span>}
               </p>
-              <p className="muted">Orders not collected here:</p>
+              <p className="muted">Pay each order amount at the counter before unblocking:</p>
               <ul>
                 {s.noShowOrders.map((o) => (
-                  <li key={o._id}>#{o.orderNumber} · ₹{o.total} · pickup {fmtDate(o.pickupTime)}</li>
+                  <li key={o._id}>
+                    #{o.orderNumber} · ₹{o.total} · pickup {fmtDate(o.pickupTime)} ·{" "}
+                    {o.paymentStatus === "paid" ? (
+                      "Paid"
+                    ) : (
+                      <button
+                        className="small"
+                        disabled={busyId === s._id}
+                        onClick={async () => {
+                          if (!window.confirm(`Confirm you received ₹${o.total} for no-show order #${o.orderNumber} at the counter?`)) return;
+                          setBusyId(s._id);
+                          try {
+                            await api.patch(`/orders/${o._id}/payment`);
+                            await load();
+                          } catch (err) {
+                            setError(errorMessage(err));
+                          } finally {
+                            setBusyId(null);
+                          }
+                        }}
+                      >
+                        Confirm counter payment
+                      </button>
+                    )}
+                  </li>
                 ))}
               </ul>
-              <button disabled={busyId === s._id} onClick={() => unblock(s)}>
-                Fine paid, unblock
+              <button
+                disabled={busyId === s._id || s.noShowOrders.some((order) => order.paymentStatus !== "paid")}
+                onClick={() => unblock(s)}
+              >
+                {busyId === s._id ? "Updating..." : "Unblock student"}
               </button>
             </div>
           ))}

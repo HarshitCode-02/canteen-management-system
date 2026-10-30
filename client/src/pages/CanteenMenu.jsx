@@ -69,6 +69,11 @@ export default function CanteenMenu() {
       <Link to="/" className="back-link">← All canteens</Link>
       <h1 className="canteen-title">{canteen.name}</h1>
       {canteen.location && <p className="muted">{canteen.location}</p>}
+      {canteen.rush && (
+        <p className={`rush rush-${canteen.rush}`}>
+          {canteen.rush} · about {canteen.waitMins} min wait
+        </p>
+      )}
       {!canteen.isOpen && <p className="error">This canteen is closed right now.</p>}
 
       {pendingItem && (
@@ -130,6 +135,12 @@ export default function CanteenMenu() {
                       )}
 
                       <h3>{m.name}</h3>
+                      {(m.isSpecial || m.isPopular) && (
+                        <p>
+                          {m.isSpecial && <span className="badge special">Today's special</span>}{" "}
+                          {m.isPopular && <span className="badge popular">Popular</span>}
+                        </p>
+                      )}
                       <p className="price">₹{m.price}</p>
                       <p className="muted">~{m.prepTimeMins} min</p>
                     </div>

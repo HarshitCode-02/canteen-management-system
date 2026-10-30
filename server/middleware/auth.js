@@ -17,8 +17,11 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: "Not authorized, token invalid or expired" });
     }
 
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id).select("+tokenVersion");
     if (!user) return res.status(401).json({ message: "User no longer exists" });
+    if ((decoded.tokenVersion || 0) !== (user.tokenVersion || 0)) {
+      return res.status(401).json({ message: "Password changed; please sign in again" });
+    }
 
     req.user = user;
     next();

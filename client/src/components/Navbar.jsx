@@ -20,7 +20,9 @@ export default function Navbar() {
         {user.role === "admin" && <Link to="/admin">Admin</Link>}
         {isStaff && <Link to="/manage-menu">Manage Menu</Link>}
         {isStaff && <Link to="/blocked">Blocked</Link>}
+        {isStaff && <Link to="/report">Sales Report</Link>}
         <Link to="/orders">My Orders</Link>
+        <Link to="/account">Account</Link>
         <Link to="/cart">Cart ({count})</Link>
         <span className="nav-user">{user.name}</span>
         <button className="small" onClick={handleLogout}>Logout</button>

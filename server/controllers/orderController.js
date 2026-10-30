@@ -66,7 +66,7 @@ exports.createOrder = async (req, res, next) => {
     }
 
     if (req.user.isBlocked) {
-      return res.status(403).json({ message: "You are blocked because of a no-show. Pay the fine at the canteen counter and ask the staff to unblock you." });
+      return res.status(403).json({ message: "You are blocked because of a no-show. Pay the full no-show order amount at the canteen counter and ask staff to record the payment and unblock you." });
     }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "items must be a non-empty array" });
@@ -172,6 +172,102 @@ exports.getMyOrders = async (req, res, next) => {
       return obj;
     });
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/orders/report?canteen=<id>&days=1|7|30 (canteen/admin)
+exports.getSalesReport = async (req, res, next) => {
+  try {
+    const { canteen: canteenId, days: rawDays } = req.query;
+    const days = Number(rawDays);
+    if (!mongoose.isValidObjectId(canteenId)) {
+      return res.status(400).json({ message: "A valid canteen id is required" });
+    }
+    if (![1, 7, 30].includes(days) || String(days) !== String(rawDays)) {
+      return res.status(400).json({ message: "days must be 1, 7 or 30" });
+    }
+    if (!canManageCanteen(req.user, canteenId)) {
+      return res.status(403).json({ message: "You cannot view this canteen's report" });
+    }
+
+    const todayInIndia = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const start = new Date(`${todayInIndia}T00:00:00+05:30`);
+    start.setUTCDate(start.getUTCDate() - (days - 1));
+    const period = {
+      canteen: new mongoose.Types.ObjectId(canteenId),
+      createdAt: { $gte: start, $lte: new Date() },
+    };
+
+    const [summaryRows, best, hours] = await Promise.all([
+      Order.aggregate([
+        { $match: period },
+        {
+          $group: {
+            _id: null,
+            orders: { $sum: 1 },
+            revenue: {
+              $sum: { $cond: [{ $eq: ["$paymentStatus", "paid"] }, "$total", 0] },
+            },
+            unpaid: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", ["collected", "no_show"]] },
+                      { $eq: ["$paymentStatus", "pending"] },
+                    ],
+                  },
+                  "$total",
+                  0,
+                ],
+              },
+            },
+            cancelled: { $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] } },
+            noShows: { $sum: { $cond: [{ $eq: ["$status", "no_show"] }, 1, 0] } },
+          },
+        },
+        { $project: { _id: 0, orders: 1, revenue: 1, unpaid: 1, cancelled: 1, noShows: 1 } },
+      ]),
+      Order.aggregate([
+        { $match: { ...period, status: "collected" } },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$items.name",
+            qty: { $sum: "$items.qty" },
+            revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } },
+          },
+        },
+        { $sort: { revenue: -1, qty: -1, _id: 1 } },
+        { $limit: 5 },
+        { $project: { _id: 0, name: "$_id", qty: 1, revenue: 1 } },
+      ]),
+      Order.aggregate([
+        { $match: period },
+        {
+          $group: {
+            _id: { $hour: { date: "$pickupTime", timezone: "Asia/Kolkata" } },
+            orders: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+        { $project: { _id: 0, hour: "$_id", orders: 1 } },
+      ]),
+    ]);
+
+    res.json({
+      days,
+      ...(summaryRows[0] || { orders: 0, revenue: 0, unpaid: 0, cancelled: 0, noShows: 0 }),
+      best,
+      hours,
+    });
   } catch (err) {
     next(err);
   }
@@ -330,8 +426,8 @@ exports.confirmPayment = async (req, res, next) => {
     if (!canManageCanteen(req.user, order.canteen)) {
       return res.status(403).json({ message: "This order belongs to another canteen" });
     }
-    if (!["ready", "collected"].includes(order.status)) {
-      return res.status(400).json({ message: "Payment can only be confirmed for ready or collected orders" });
+    if (!["ready", "collected", "no_show"].includes(order.status)) {
+      return res.status(400).json({ message: "Payment can only be confirmed for ready, collected, or no-show orders" });
     }
 
     order.paymentStatus = "paid";
@@ -372,4 +468,3 @@ exports.runningLate = async (req, res, next) => {
     next(err);
   }
 };
-

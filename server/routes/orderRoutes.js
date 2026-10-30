@@ -2,6 +2,7 @@ const express = require("express");
 const {
   createOrder,
   getMyOrders,
+  getSalesReport,
   getActiveOrders,
   updateStatus,
   cancelOrder,
@@ -16,6 +17,7 @@ router.use(protect); // every order route needs login
 
 router.post("/", createOrder);
 router.get("/my", getMyOrders);
+router.get("/report", authorize("canteen", "admin"), getSalesReport);
 router.get("/", authorize("canteen", "admin"), getActiveOrders);
 router.patch("/:id/status", authorize("canteen", "admin"), updateStatus);
 router.patch("/:id/cancel", cancelOrder);

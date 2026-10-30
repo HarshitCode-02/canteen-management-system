@@ -26,6 +26,9 @@ export default function CanteenList() {
         {canteens.map((c) => (
           <Link key={c._id} to={`/canteen/${c._id}`} className="canteen-card">
             <h3>{c.name}</h3>
+            {c.rush && (
+              <span className={`rush rush-${c.rush}`}>{c.rush} · ~{c.waitMins} min</span>
+            )}
             {c.location && <p className="muted">{c.location}</p>}
             {c.description && <p className="muted">{c.description}</p>}
             <span className={`badge ${c.isOpen ? "open" : ""}`}>
