@@ -3,7 +3,7 @@ import api, { errorMessage } from "../api";
 import useStaffCanteen from "../useStaffCanteen";
 import CanteenSwitcher from "../components/CanteenSwitcher";
 
-const EMPTY_FORM = { name: "", price: "", category: "", prepTimeMins: 10 };
+const EMPTY_FORM = { name: "", price: "", category: "", prepTimeMins: 10, image: "" };
 
 export default function ManageMenu() {
   const [menu, setMenu] = useState([]);
@@ -98,6 +98,7 @@ export default function ManageMenu() {
         canteen: canteenId,
         name: form.name.trim(),
         category: form.category.trim(),
+        image: form.image.trim(),
         price,
         prepTimeMins: Number(form.prepTimeMins) || 10,
       });
@@ -157,6 +158,15 @@ export default function ManageMenu() {
             min="0"
             value={form.prepTimeMins}
             onChange={(e) => setForm({ ...form, prepTimeMins: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          Image URL (optional)
+          <input
+            type="url"
+            value={form.image}
+            placeholder="https://..."
+            onChange={(e) => setForm({ ...form, image: e.target.value })}
           />
         </label>
         <button type="submit" disabled={busyId === "new"}>

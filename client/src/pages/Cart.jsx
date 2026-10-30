@@ -14,6 +14,7 @@ export default function Cart() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
+  const [note, setNote] = useState("");
   const canteenId = canteen?._id;
 
   // check whether the canteen is still open
@@ -56,6 +57,7 @@ export default function Cart() {
       await api.post("/orders", {
         items: items.map((i) => ({ menuItemId: i.menuItemId, qty: i.qty })),
         pickupTime: slot,
+        note,
       });
       clearCart();
       navigate("/orders");
@@ -124,6 +126,16 @@ export default function Cart() {
       {!isOpen && <p className="error">This canteen is closed right now. You can't place an order.</p>}
       {error && <p className="error">{error}</p>}
       <p className="muted">You pay at the counter when you collect.</p>
+      <label className="field">
+        Note for the canteen (optional)
+        <input
+          value={note}
+          maxLength={100}
+          placeholder="e.g. less spicy, no onion"
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <small className="muted">{note.length}/100</small>
+      </label>
       <button onClick={placeOrder} disabled={busy || !isOpen || !slot}>
         {busy ? "Placing order..." : "Place order"}
       </button>

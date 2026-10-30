@@ -11,6 +11,10 @@ export default function CanteenMenu() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [pendingItem, setPendingItem] = useState(null);
+  const [search, setSearch] = useState("");
+  const [activeCat, setActiveCat] = useState("All");
+
+
 
   useEffect(() => {
     setLoading(true);
@@ -37,6 +41,13 @@ export default function CanteenMenu() {
   }
 
   const categories = [...new Set(menu.map((m) => m.category))];
+  const q = search.trim().toLowerCase();
+  const visible = menu.filter(
+    (m) =>
+      (activeCat === "All" || m.category === activeCat) &&
+      (!q || m.name.toLowerCase().includes(q))
+  );
+  const visibleCategories = categories.filter((c) => visible.some((m) => m.category === c));
   const qtyInCart = (itemId) => cart.find((i) => i.menuItemId === itemId)?.qty || 0;
 
   const handleAdd = (m) => {
@@ -73,17 +84,51 @@ export default function CanteenMenu() {
 
       {menu.length === 0 && <p className="center">No items on the menu yet.</p>}
 
-      {categories.map((cat) => (
+      {menu.length > 0 && (
+        <>
+          <input
+            className="menu-search"
+            placeholder="Search the menu..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="chips">
+            {["All", ...categories].map((c) => (
+              <button
+                key={c}
+                className={`small chip ${activeCat === c ? "active" : ""}`}
+                onClick={() => setActiveCat(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          {visible.length === 0 && <p className="muted">No items match your search.</p>}
+        </>
+      )}
+
+
+      {visibleCategories.map((cat) => (
         <section key={cat}>
           <h2>{cat}</h2>
           <div className="menu-grid">
-            {menu
+            {visible
               .filter((m) => m.category === cat)
               .map((m) => {
                 const qty = qtyInCart(m._id);
                 return (
                   <div key={m._id} className={`menu-item ${m.isAvailable ? "" : "soldout"}`}>
                     <div>
+                      {m.image && (
+                        <img
+                          src={m.image}
+                          alt={m.name}
+                          className="menu-img"
+                          loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                      )}
+
                       <h3>{m.name}</h3>
                       <p className="price">₹{m.price}</p>
                       <p className="muted">~{m.prepTimeMins} min</p>

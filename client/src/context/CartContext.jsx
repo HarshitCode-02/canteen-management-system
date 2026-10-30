@@ -63,12 +63,17 @@ export function CartProvider({ children }) {
   const remove = (id) => setItems((prev) => prev.filter((i) => i.menuItemId !== id));
   const clearCart = () => setItems([]);
 
+  const replaceCart = (c, list) => {
+    setCanteen({ _id: c._id, name: c.name });
+    setItems(list);
+  };
+
   const count = items.reduce((s, i) => s + i.qty, 0);
   const total = items.reduce((s, i) => s + i.price * i.qty, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, canteen, addItem, decrease, remove, clearCart, count, total }}
+      value={{ items, canteen, addItem, decrease, remove, clearCart,replaceCart, count, total }}
     >
       {children}
     </CartContext.Provider>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useCart } from "../context/CartContext";
 import api, { errorMessage } from "../api";
 import { connectSocket } from "../socket";
 
@@ -36,6 +37,67 @@ function LateButton({ order }) {
   );
 }
 
+function ReorderButton({ order }) {
+  const { items: cartItems, replaceCart } = useCart();
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const reorder = async () => {
+    if (cartItems.length > 0 && !window.confirm("Replace the items in your cart?")) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await api.get(`/canteens/${order.canteen._id}/menu`);
+      const { canteen, items } = res.data;
+      if (!canteen.isOpen) {
+        setMsg(`${canteen.name} is closed right now.`);
+        return;
+      }
+      const list = [];
+      const skipped = [];
+      for (const oi of order.items) {
+        const id = String(oi.menuItem?._id || oi.menuItem);
+        const m = items.find((x) => x._id === id && x.isAvailable !== false);
+        if (m) {
+          list.push({
+            menuItemId: m._id,
+            name: m.name,
+            price: m.price,
+            qty: Math.min(oi.qty, 20),
+          });
+        } else {
+          skipped.push(oi.name);
+        }
+      }
+      if (list.length === 0) {
+        setMsg("None of these items are available now.");
+        return;
+      }
+      if (
+        skipped.length &&
+        !window.confirm(`Not available now: ${skipped.join(", ")}. Continue without them?`)
+      )
+        return;
+      replaceCart(canteen, list);
+      navigate("/cart");
+    } catch (err) {
+      setMsg(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <button className="small" onClick={reorder} disabled={busy}>
+        {busy ? "Checking menu..." : "Reorder"}
+      </button>
+      {msg && <p className="error">{msg}</p>}
+    </>
+  );
+}
+
 const LABELS = {
   placed: "Order received",
   preparing: "Being prepared",
@@ -59,14 +121,12 @@ function OrderCard({ order, onCancel }) {
         <span className="status-pill">{LABELS[order.status]}</span>
       </div>
 
-      {order.canteen?.name && (
-        <p className="muted">{order.canteen.name}</p>
-      )}
+      {order.canteen?.name && <p className="muted">{order.canteen.name}</p>}
+
+      {order.note && <p className="muted">Note: {order.note}</p>}
 
       {order.status === "no_show" && (
-        <p className="error">
-          You did not collect this order.
-        </p>
+        <p className="error">You did not collect this order.</p>
       )}
 
       {order.pickupCode && (
@@ -100,23 +160,17 @@ function OrderCard({ order, onCancel }) {
       </p>
 
       {order.status === "placed" && (
-        <button
-          className="small danger"
-          onClick={() => onCancel(order._id)}
-        >
+        <button className="small danger" onClick={() => onCancel(order._id)}>
           Cancel order
         </button>
+      )}
+
+      {["collected", "cancelled", "no_show"].includes(order.status) && (
+        <ReorderButton order={order} />
       )}
     </div>
   );
 }
-
-{
-  "Notification" in window && Notification.permission === "default" && (
-    <button onClick={() => Notification.requestPermission()}>Enable notifications</button>
-  )
-}
-
 
 export default function MyOrders() {
   const [orders, setOrders] = useState([]);
@@ -136,7 +190,7 @@ export default function MyOrders() {
     }
   }, []);
 
-  // load now, then poll every 10 seconds
+  // load now, then slow polling every 30 seconds (fallback if the socket drops)
   useEffect(() => {
     load();
     const timer = setInterval(load, 30000);
@@ -148,8 +202,14 @@ export default function MyOrders() {
     if (!socket) return;
     const onUpdated = (p) => {
       load();
-      if (p.status === "ready" && "Notification" in window && Notification.permission === "granted") {
-        new Notification(`Order ${p.orderNumber} is ready!`, { body: "Collect it at the counter." });
+      if (
+        p.status === "ready" &&
+        "Notification" in window &&
+        Notification.permission === "granted"
+      ) {
+        new Notification(`Order ${p.orderNumber} is ready!`, {
+          body: "Collect it at the counter.",
+        });
       }
     };
     socket.on("orderUpdated", onUpdated);
@@ -161,7 +221,7 @@ export default function MyOrders() {
     api
       .get("/auth/me")
       .then((res) => setBlocked(!!res.data.user?.isBlocked))
-      .catch(() => { });
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -181,8 +241,6 @@ export default function MyOrders() {
     };
   }, [refreshBlocked]);
 
-
-
   const cancel = async (id) => {
     if (!window.confirm("Cancel this order?")) return;
     try {
@@ -198,6 +256,15 @@ export default function MyOrders() {
   const active = orders.filter((o) => ACTIVE.includes(o.status));
   const past = orders.filter((o) => !ACTIVE.includes(o.status));
 
+  const canteenNames = [
+    ...new Set(
+      orders
+        .filter((o) => o.status === "no_show")
+        .map((o) => o.canteen?.name)
+        .filter(Boolean)
+    ),
+  ].join(", ");
+
   return (
     <div>
       {error && <p className="error">{error}</p>}
@@ -206,8 +273,8 @@ export default function MyOrders() {
         <div className="blocked-banner">
           <b>You are blocked from placing orders.</b>
           <p>
-            You did not collect an order from {canteenNames || "the canteen"}. Pay the fine
-            at that canteen's counter and ask the staff to unblock you.
+            You did not collect an order from {canteenNames || "the canteen"}. Pay the
+            fine at that canteen's counter and ask the staff to unblock you.
           </p>
         </div>
       )}

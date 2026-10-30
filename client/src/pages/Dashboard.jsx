@@ -214,6 +214,8 @@ export default function Dashboard() {
                   ))}
                 </ul>
 
+                {o.note && <p className="order-note">📝 {o.note}</p>}
+
                 <p className="muted">
                   Total ₹{o.total} · {paid ? "Paid" : "Payment pending"} · Pickup {fmtTime(o.pickupTime)} · Ordered {fmtTime(o.createdAt)}
                 </p>

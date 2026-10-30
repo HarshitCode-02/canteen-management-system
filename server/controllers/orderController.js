@@ -55,7 +55,15 @@ const nextOrderNumber = async (canteenId) => {
 // POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, pickupTime } = req.body;
+    const { items, pickupTime, note } = req.body;
+
+    if (note !== undefined && typeof note !== "string") {
+      return res.status(400).json({ message: "note must be text" });
+    }
+    const cleanNote = (note || "").trim();
+    if (cleanNote.length > 100) {
+      return res.status(400).json({ message: "Note can be at most 100 characters" });
+    }
 
     if (req.user.isBlocked) {
       return res.status(403).json({ message: "You are blocked because of a no-show. Pay the fine at the canteen counter and ask the staff to unblock you." });
@@ -138,6 +146,7 @@ exports.createOrder = async (req, res, next) => {
       items: orderItems,
       total,
       pickupTime: pickup,
+      note: cleanNote,
       pickupCode: makePickupCode(),
     });
     notifyOrder(order, "newOrder");
@@ -154,6 +163,7 @@ exports.getMyOrders = async (req, res, next) => {
     const orders = await Order.find({ user: req.user._id })
       .sort({ createdAt: -1 })
       .select("+pickupCode")
+      .limit(50)
       .populate("canteen", "name");
 
     const result = orders.map((o) => {
