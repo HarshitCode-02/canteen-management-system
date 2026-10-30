@@ -419,3 +419,12 @@ button.ok {
   border-radius: 8px;
   margin: 12px 0;
 }
+.late-badge {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  margin: 4px 0;
+}

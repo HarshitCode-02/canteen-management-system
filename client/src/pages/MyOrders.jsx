@@ -3,6 +3,38 @@ import { Link } from "react-router-dom";
 import api, { errorMessage } from "../api";
 import { connectSocket } from "../socket";
 
+function LateButton({ order }) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  if (order.lateExtended || done) {
+    return <p className="muted">Extra 10 minutes added. Please come soon.</p>;
+  }
+
+  const tap = async () => {
+    if (!window.confirm("Add 10 extra minutes? You can do this only once.")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.patch(`/orders/${order._id}/late`);
+      setDone(true);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <button className="small" onClick={tap} disabled={busy}>
+        {busy ? "Adding..." : "I'm running late (+10 min)"}
+      </button>
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
 
 const LABELS = {
   placed: "Order received",
@@ -50,6 +82,8 @@ function OrderCard({ order, onCancel }) {
           Your order is ready! Collect it at the counter and pay ₹{order.total}.
         </p>
       )}
+
+      {order.status === "ready" && <LateButton order={order} />}
 
       <ul>
         {order.items.map((i, idx) => (
@@ -167,7 +201,7 @@ export default function MyOrders() {
   return (
     <div>
       {error && <p className="error">{error}</p>}
-      
+
       {blocked && (
         <div className="blocked-banner">
           <b>You are blocked from placing orders.</b>

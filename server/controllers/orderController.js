@@ -19,6 +19,7 @@ const { markNoShow } = require("../noShow");
 
 
 
+
 // Counter key is today's date in India time, so numbers reset at midnight IST
 const todayKey = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -331,3 +332,34 @@ exports.confirmPayment = async (req, res, next) => {
     next(err);
   }
 };
+
+// PATCH /api/orders/:id/late  (order owner, only while ready, only once)
+exports.runningLate = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+
+    // one atomic update: owner + ready + not used yet
+    const order = await Order.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id, status: "ready", lateExtended: { $ne: true } },
+      { lateExtended: true },
+      { new: true }
+    );
+
+    if (!order) {
+      const existing = await Order.findOne({ _id: req.params.id, user: req.user._id }).select("status lateExtended");
+      if (!existing) return res.status(404).json({ message: "Order not found" });
+      if (existing.status !== "ready") {
+        return res.status(400).json({ message: "You can ask for extra time only once your order is ready" });
+      }
+      return res.status(400).json({ message: "You have already used your extra time" });
+    }
+
+    notifyOrder(order);
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+};
+

@@ -26,6 +26,7 @@ const orderSchema = new mongoose.Schema({
   codeAttempts: { type: Number, default: 0, select: false },
   createdAt: { type: Date, default: Date.now },
   readyAt: { type: Date },
+    lateExtended: { type: Boolean, default: false },
 });
 
 orderSchema.index({ user: 1, status: 1 });

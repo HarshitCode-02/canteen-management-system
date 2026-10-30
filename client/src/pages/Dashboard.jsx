@@ -193,6 +193,11 @@ export default function Dashboard() {
                   <span className="status-pill">{LABELS[o.status]}</span>
                 </div>
 
+                {o.status === "ready" && o.lateExtended && (
+                  <span className="late-badge">Running late · +10 min</span>
+                )}
+
+
                 <p>
                   <b>{o.user?.name}</b>
                   {o.user?.phone && (
