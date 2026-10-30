@@ -50,6 +50,7 @@ mongoose
     const server = http.createServer(app);
     initSocket(server);
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    require("./noShow").startNoShowJob();
   })
   .catch((err) => {
     console.error('MongoDB connection failed:', err.message);

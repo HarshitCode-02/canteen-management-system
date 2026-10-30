@@ -19,6 +19,7 @@ export default function Navbar() {
         {isStaff && <Link to="/dashboard">Dashboard</Link>}
         {user.role === "admin" && <Link to="/admin">Admin</Link>}
         {isStaff && <Link to="/manage-menu">Manage Menu</Link>}
+        {isStaff && <Link to="/blocked">Blocked</Link>}
         <Link to="/orders">My Orders</Link>
         <Link to="/cart">Cart ({count})</Link>
         <span className="nav-user">{user.name}</span>

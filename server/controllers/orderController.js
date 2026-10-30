@@ -9,6 +9,15 @@ const STATUSES = [...ACTIVE, ...FINAL];
 const Canteen = require("../models/Canteen");
 const crypto = require("crypto");
 const { notifyOrder } = require("../socket");
+const { countInSlot } = require("../slots");
+const { markNoShow } = require("../noShow");
+
+
+
+
+
+
+
 
 // Counter key is today's date in India time, so numbers reset at midnight IST
 const todayKey = () =>
@@ -48,7 +57,7 @@ exports.createOrder = async (req, res, next) => {
     const { items, pickupTime } = req.body;
 
     if (req.user.isBlocked) {
-      return res.status(403).json({ message: "Your account is blocked. Please contact the canteen." });
+      return res.status(403).json({ message: "You are blocked because of a no-show. Pay the fine at the canteen counter and ask the staff to unblock you." });
     }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "items must be a non-empty array" });
@@ -99,6 +108,18 @@ exports.createOrder = async (req, res, next) => {
     if (!canteen) {
       return res.status(400).json({ message: "This canteen is not available" });
     }
+    if (!canteen.isOpen) {
+      return res.status(400).json({ message: `${canteen.name} is closed right now` });
+    }
+    if (!canteen.isOpen) {
+      return res.status(400).json({ message: `${canteen.name} is closed right now` });
+    }
+
+    const used = await countInSlot(canteenId, pickup);
+    if (used >= canteen.slotLimit) {
+      return res.status(409).json({ message: "That pickup slot is full. Please choose another time." });
+    }
+
 
     // prices come from the DB, never from the client
     const orderItems = menuItems.map((m) => ({
@@ -198,6 +219,14 @@ exports.updateStatus = async (req, res, next) => {
     }
     if (!(ALLOWED[order.status] || []).includes(status)) {
       return res.status(400).json({ message: `Cannot change an order from ${order.status} to ${status}` });
+    }
+
+    if (status === "no_show") {
+      const done = await markNoShow(order._id);
+      if (!done) {
+        return res.status(400).json({ message: "This order is no longer ready" });
+      }
+      return res.json(done);
     }
 
     order.status = status;

@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api, { errorMessage } from "../api";
 import { useCart } from "../context/CartContext";
 
-const PICKUP_OPTIONS = [15, 30, 45, 60, 90]; // minutes from now
+const fmtSlot = (iso) =>
+  new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
 export default function Cart() {
   const { items, canteen, addItem, decrease, remove, clearCart, total } = useCart();
   const navigate = useNavigate();
-  const [minutes, setMinutes] = useState(30);
+  const [slots, setSlots] = useState([]);
+  const [slot, setSlot] = useState(""); // ISO start time of the chosen slot
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
@@ -20,23 +22,46 @@ export default function Cart() {
     api
       .get(`/canteens/${canteenId}`)
       .then((res) => setIsOpen(res.data.isOpen))
-      .catch(() => {});
+      .catch(() => { });
   }, [canteenId]);
 
+  // load the pickup slots; keep the chosen slot if it is still free, else pick the first free one
+  const loadSlots = useCallback(() => {
+    if (!canteenId) return;
+    api
+      .get(`/canteens/${canteenId}/slots`)
+      .then((res) => {
+        setSlots(res.data);
+        setSlot((cur) => {
+          if (res.data.find((s) => s.start === cur && !s.full)) return cur;
+          const firstFree = res.data.find((s) => !s.full);
+          return firstFree ? firstFree.start : "";
+        });
+      })
+      .catch(() => { });
+  }, [canteenId]);
+
+  // refresh every minute so past slots drop off
+  useEffect(() => {
+    loadSlots();
+    const timer = setInterval(loadSlots, 60000);
+    return () => clearInterval(timer);
+  }, [loadSlots]);
+
   const placeOrder = async () => {
-    if (!isOpen) return;
+    if (!isOpen || !slot) return;
     setError("");
     setBusy(true);
     try {
-      const pickupTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
       await api.post("/orders", {
         items: items.map((i) => ({ menuItemId: i.menuItemId, qty: i.qty })),
-        pickupTime,
+        pickupTime: slot,
       });
       clearCart();
       navigate("/orders");
     } catch (err) {
       setError(errorMessage(err));
+      loadSlots(); // a slot may have just filled up
     } finally {
       setBusy(false);
     }
@@ -83,18 +108,23 @@ export default function Cart() {
       </div>
 
       <label className="field">
-        I'll pick it up in
-        <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
-          {PICKUP_OPTIONS.map((m) => (
-            <option key={m} value={m}>{m} minutes</option>
+        Pickup time
+        <select value={slot} onChange={(e) => setSlot(e.target.value)}>
+          {slots.map((s) => (
+            <option key={s.start} value={s.start} disabled={s.full}>
+              {fmtSlot(s.start)} {s.full ? "- Full" : `(${s.used}/${s.limit})`}
+            </option>
           ))}
         </select>
       </label>
 
+      {slots.length > 0 && slots.every((s) => s.full) && (
+        <p className="error">All upcoming slots are full. Try again in a few minutes.</p>
+      )}
       {!isOpen && <p className="error">This canteen is closed right now. You can't place an order.</p>}
       {error && <p className="error">{error}</p>}
       <p className="muted">You pay at the counter when you collect.</p>
-      <button onClick={placeOrder} disabled={busy || !isOpen}>
+      <button onClick={placeOrder} disabled={busy || !isOpen || !slot}>
         {busy ? "Placing order..." : "Place order"}
       </button>
     </div>

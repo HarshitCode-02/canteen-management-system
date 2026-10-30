@@ -357,9 +357,17 @@ button.ok {
   padding: 6px 10px;
   margin: 8px 0;
 }
-.pickup-code span { font-size: 0.8rem; color: #9a3412; }
-.pickup-code b { font-size: 1.5rem; letter-spacing: 0.25rem; }
-.pickup-code small { display: none; }
+.pickup-code span {
+  font-size: 0.8rem;
+  color: #9a3412;
+}
+.pickup-code b {
+  font-size: 1.5rem;
+  letter-spacing: 0.25rem;
+}
+.pickup-code small {
+  display: none;
+}
 
 .code-input {
   width: 100%;
@@ -369,4 +377,45 @@ button.ok {
   padding: 8px;
   margin: 6px 0;
 }
-.pay-check { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 0.9rem; }
+.pay-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  font-size: 0.9rem;
+}
+.slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.slot {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.slot.selected {
+  border-color: #e65100;
+  background: #fff3e0;
+  font-weight: 600;
+}
+.slot:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.order-card.status-no_show {
+  border-left: 5px solid #c62828;
+  background: #ffebee;
+}
+.blocked-banner {
+  border: 1px solid #c62828;
+  background: #ffebee;
+  color: #b71c1c;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+}

@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
   managedCanteens: [{ type: mongoose.Schema.Types.ObjectId, ref: "Canteen" }],
   noShowCount: { type: Number, default: 0 },
   isBlocked: { type: Boolean, default: false },
+  blockedAt: { type: Date },
   createdAt: { type: Date, default: Date.now },
 });
 

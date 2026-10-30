@@ -10,7 +10,7 @@ const LABELS = {
   ready: "Ready for pickup",
   collected: "Collected",
   cancelled: "Cancelled",
-  no_show: "Not collected",
+  no_show: "No-show (not collected)",
 };
 const ACTIVE = ["placed", "preparing", "ready"];
 
@@ -26,7 +26,16 @@ function OrderCard({ order, onCancel }) {
         <h3>#{order.orderNumber}</h3>
         <span className="status-pill">{LABELS[order.status]}</span>
       </div>
-      {order.canteen?.name && <p className="muted">{order.canteen.name}</p>}
+
+      {order.canteen?.name && (
+        <p className="muted">{order.canteen.name}</p>
+      )}
+
+      {order.status === "no_show" && (
+        <p className="error">
+          You did not collect this order.
+        </p>
+      )}
 
       {order.pickupCode && (
         <div className="pickup-code">
@@ -44,7 +53,9 @@ function OrderCard({ order, onCancel }) {
 
       <ul>
         {order.items.map((i, idx) => (
-          <li key={idx}>{i.qty} × {i.name} — ₹{i.price * i.qty}</li>
+          <li key={idx}>
+            {i.qty} × {i.name} — ₹{i.price * i.qty}
+          </li>
         ))}
       </ul>
 
@@ -55,7 +66,10 @@ function OrderCard({ order, onCancel }) {
       </p>
 
       {order.status === "placed" && (
-        <button className="small danger" onClick={() => onCancel(order._id)}>
+        <button
+          className="small danger"
+          onClick={() => onCancel(order._id)}
+        >
           Cancel order
         </button>
       )}
@@ -72,6 +86,7 @@ function OrderCard({ order, onCancel }) {
 
 export default function MyOrders() {
   const [orders, setOrders] = useState([]);
+  const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -107,6 +122,32 @@ export default function MyOrders() {
     return () => socket.off("orderUpdated", onUpdated);
   }, [load]);
 
+  // is this student blocked? refresh on load, every 30s, and on socket events
+  const refreshBlocked = useCallback(() => {
+    api
+      .get("/auth/me")
+      .then((res) => setBlocked(!!res.data.user?.isBlocked))
+      .catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    refreshBlocked();
+    const timer = setInterval(refreshBlocked, 30000);
+    const socket = connectSocket();
+    if (socket) {
+      socket.on("orderUpdated", refreshBlocked);
+      socket.on("accountUpdated", refreshBlocked);
+    }
+    return () => {
+      clearInterval(timer);
+      if (socket) {
+        socket.off("orderUpdated", refreshBlocked);
+        socket.off("accountUpdated", refreshBlocked);
+      }
+    };
+  }, [refreshBlocked]);
+
+
 
   const cancel = async (id) => {
     if (!window.confirm("Cancel this order?")) return;
@@ -126,6 +167,16 @@ export default function MyOrders() {
   return (
     <div>
       {error && <p className="error">{error}</p>}
+      
+      {blocked && (
+        <div className="blocked-banner">
+          <b>You are blocked from placing orders.</b>
+          <p>
+            You did not collect an order from {canteenNames || "the canteen"}. Pay the fine
+            at that canteen's counter and ask the staff to unblock you.
+          </p>
+        </div>
+      )}
 
       {"Notification" in window && Notification.permission === "default" && (
         <button onClick={() => Notification.requestPermission()}>

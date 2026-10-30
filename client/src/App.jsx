@@ -10,6 +10,9 @@ import Cart from "./pages/Cart";
 import Dashboard from "./pages/Dashboard";
 import ManageMenu from "./pages/ManageMenu";
 import AdminPanel from "./pages/AdminPanel";
+import BlockedStudents from "./pages/BlockedStudents";
+
+
 
 export default function App() {
   return (
@@ -42,6 +45,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["canteen", "admin"]}>
               <ManageMenu />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/blocked"
+          element={
+            <ProtectedRoute roles={["canteen", "admin"]}>
+              <BlockedStudents />
             </ProtectedRoute>
           }
         />

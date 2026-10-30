@@ -29,6 +29,8 @@ export default function Dashboard() {
   const [payNow, setPayNow] = useState({}); // order id -> false if "payment received" unticked
   const { canteens, canteen, canteenId, setCanteenId, error: canteenError } = useStaffCanteen();
   const [soundOn, setSoundOn] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
+
 
   const load = useCallback(async () => {
     if (!canteenId) return;
@@ -81,6 +83,15 @@ export default function Dashboard() {
     };
   }, [canteenId, load]);
 
+  // read the canteen's current open/closed state whenever the selected canteen changes
+  useEffect(() => {
+    if (!canteenId) return;
+    api
+      .get(`/canteens/${canteenId}`)
+      .then((res) => setIsOpen(res.data.isOpen))
+      .catch(() => { });
+  }, [canteenId]);
+
   const run = async (order, request) => {
     setBusyId(order._id);
     setError("");
@@ -121,6 +132,17 @@ export default function Dashboard() {
   const confirmPayment = (order) =>
     run(order, () => api.patch(`/orders/${order._id}/payment`));
 
+  const toggleOpen = async () => {
+    try {
+      const res = await api.patch(`/canteens/${canteenId}/open`, { isOpen: !isOpen });
+      setIsOpen(res.data.isOpen);
+      setError("");
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+
   if (canteenError) return <p className="error">{canteenError}</p>;
   if (loading) return <p className="center">Loading orders...</p>;
 
@@ -140,6 +162,13 @@ export default function Dashboard() {
           Enable sound
         </button>
       )}
+      <p>
+        Canteen is <b>{isOpen ? "OPEN" : "CLOSED"}</b>{" "}
+        <button className={isOpen ? "small danger" : "small"} onClick={toggleOpen}>
+          {isOpen ? "Close canteen" : "Open canteen"}
+        </button>
+      </p>
+
 
       <CanteenSwitcher
         canteens={canteens}
@@ -228,7 +257,7 @@ export default function Dashboard() {
                       className="small danger"
                       disabled={busy}
                       onClick={() =>
-                        setStatus(o, "no_show", `Mark #${o.orderNumber} as no-show?`)
+                        setStatus(o, "no_show", `Mark #${o.orderNumber} as no-show? The student will be blocked until staff unblock them.`)
                       }
                     >
                       No-show
@@ -239,7 +268,7 @@ export default function Dashboard() {
                       className="small danger"
                       disabled={busy}
                       onClick={() =>
-                        setStatus(o, "cancelled", `Cancel #${o.orderNumber}?`)
+                        setStatus(o, "cancelled", `Cancel #${o.orderNumber}? The student will be blocked until staff unblock them.`)
                       }
                     >
                       Cancel
