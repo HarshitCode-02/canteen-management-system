@@ -62,7 +62,8 @@ exports.getMenuItemReviews = async (req, res, next) => {
     const filter = { menuItem: req.params.menuItemId, isVisible: true };
     const [reviews, total] = await Promise.all([
       Review.find(filter)
-        .select("rating text createdAt")
+        .select("rating text createdAt user")
+        .populate("user", "name")
         .sort({ createdAt: -1 })
         .skip((page - 1) * 20)
         .limit(20),

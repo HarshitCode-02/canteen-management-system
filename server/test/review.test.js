@@ -122,11 +122,14 @@ test("public review listing includes only visible reviews and validates page num
   const originalFind = Review.find;
   const originalCount = Review.countDocuments;
   let filter;
+  let selectedFields;
+  let populatedField;
   let limit;
   Review.find = (value) => {
     filter = value;
     const query = {
-      select() { return this; },
+      select(fields) { selectedFields = fields; return this; },
+      populate(field, fields) { populatedField = { field, fields }; return this; },
       sort() { return this; },
       skip() { return this; },
       limit(value) { limit = value; return this; },
@@ -144,6 +147,8 @@ test("public review listing includes only visible reviews and validates page num
   await getMenuItemReviews({ params: { menuItemId: itemId }, query: { page: "1" } }, res, (err) => { throw err; });
 
   assert.deepEqual(filter, { menuItem: itemId, isVisible: true });
+  assert.equal(selectedFields, "rating text createdAt user");
+  assert.deepEqual(populatedField, { field: "user", fields: "name" });
   assert.equal(limit, 20);
   assert.equal(res.body.total, 1);
 });
