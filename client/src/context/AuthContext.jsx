@@ -8,17 +8,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // on page load, restore the session from the saved token
+  // The browser session is restored from the HttpOnly auth cookie.
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    localStorage.removeItem("token");
     api
       .get("/auth/me")
       .then((res) => setUser(res.data.user))
-      .catch(() => localStorage.removeItem("token"))
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -28,29 +24,32 @@ export function AuthProvider({ children }) {
   }, [user]);
 
 
-  const saveSession = ({ token, user }) => {
-    localStorage.setItem("token", token);
+  const saveSession = (user) => {
     setUser(user);
     return user;
   };
 
   const login = async (email, password) => {
     const res = await api.post("/auth/login", { email, password });
-    return saveSession(res.data);
+    return saveSession(res.data.user);
   };
 
   const register = async (form) => {
     const res = await api.post("/auth/register", form);
-    return saveSession(res.data);
+    return saveSession(res.data.user);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await api.post("/auth/logout");
     localStorage.removeItem("token");
+    disconnectSocket();
     setUser(null);
   };
 
+  const updateUser = (updatedUser) => setUser(updatedUser);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

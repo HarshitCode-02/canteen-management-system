@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const User = require("../models/User");
 const { markNoShow } = require("../noShow");
@@ -19,12 +20,18 @@ const response = () => ({
 });
 
 test("the first no-show immediately blocks the student", async (t) => {
+  const originalStartSession = mongoose.startSession;
   const originalFindOneAndUpdate = Order.findOneAndUpdate;
   const originalFindByIdAndUpdate = User.findByIdAndUpdate;
+  mongoose.startSession = async () => ({
+    withTransaction: async (callback) => callback(),
+    endSession: async () => {},
+  });
   let saved = false;
-  Order.findOneAndUpdate = async (filter, update) => {
+  Order.findOneAndUpdate = async (filter, update, options) => {
     assert.equal(filter.status, "ready");
     assert.deepEqual(update, { status: "no_show" });
+    assert.ok(options.session);
     return {
       _id: "order-id",
       user: "user-id",
@@ -32,18 +39,21 @@ test("the first no-show immediately blocks the student", async (t) => {
       status: update.status,
     };
   };
-  User.findByIdAndUpdate = async (_id, update) => {
+  User.findByIdAndUpdate = async (_id, update, options) => {
     assert.deepEqual(update, { $inc: { noShowCount: 1 } });
+    assert.ok(options.session);
     return {
       noShowCount: 1,
       isBlocked: false,
-      async save() {
+      async save(saveOptions) {
+        assert.ok(saveOptions.session);
         this.isBlocked = true;
         saved = true;
       },
     };
   };
   t.after(() => {
+    mongoose.startSession = originalStartSession;
     Order.findOneAndUpdate = originalFindOneAndUpdate;
     User.findByIdAndUpdate = originalFindByIdAndUpdate;
   });
@@ -91,10 +101,10 @@ test("staff cannot unblock until the no-show order amount is recorded as paid", 
   const originalExists = Order.exists;
   const originalFindOneAndUpdate = User.findOneAndUpdate;
   const canteenId = "507f1f77bcf86cd799439011";
-  let existsCalls = 0;
+  const existenceFilters = [];
   let userUpdateCalled = false;
-  Order.exists = async () => {
-    existsCalls += 1;
+  Order.exists = async (filter) => {
+    existenceFilters.push(filter);
     return { _id: "order-id" };
   };
   User.findOneAndUpdate = async () => {
@@ -118,7 +128,9 @@ test("staff cannot unblock until the no-show order amount is recorded as paid", 
     }
   );
 
-  assert.equal(existsCalls, 2);
+  assert.equal(existenceFilters.length, 2);
+  assert.equal(existenceFilters[0].canteen, canteenId);
+  assert.equal(Object.hasOwn(existenceFilters[1], "canteen"), false);
   assert.equal(res.statusCode, 409);
   assert.equal(userUpdateCalled, false);
 });

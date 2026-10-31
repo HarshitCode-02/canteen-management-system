@@ -597,6 +597,57 @@ button.ok {
 .account-card {
   max-width: 480px;
 }
+.account-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.account-password {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #a63b00;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+.login-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 16px;
+  font-size: 14px;
+}
+.recovery-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-left: 4px solid #e65100;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #422006;
+  font-size: 14px;
+}
+.recovery-panel p {
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+.recovery-panel .recovery-note {
+  color: #777;
+  font-size: 12px;
+}
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,

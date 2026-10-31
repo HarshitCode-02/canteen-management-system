@@ -67,7 +67,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Pickup verification with a 4-digit code | Implemented |
 | Cash/UPI payment confirmed manually at the counter | Implemented |
 | Open/closed switch, pickup-slot limits, no-show auto-blocking after one missed pickup | Implemented in code |
-| Order history, reorder, search, sales reports, admin controls, password change, PWA manifest | Implemented in code |
+| Order history, reorder, search, sales reports, admin controls, editable account profile/password, PWA manifest | Implemented in code |
 | Docker development and GitHub Actions CI | Configured; local Docker startup not yet verified |
 | Real-device testing, CampusBites pilot, production deployment | Not done |
 
@@ -117,7 +117,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 ### A. Customer features
 | Feature | What happens behind the scenes | Where |
 |---|---|---|
-| Register / login | Password hashed with bcrypt, JWT returned and saved in `localStorage` | `authController`, `Login.jsx`, `Register.jsx`, `AuthContext.jsx` |
+| Register / login | Password hashed with bcrypt; the signed JWT is set in an HttpOnly cookie | `authController`, `Login.jsx`, `Register.jsx`, `AuthContext.jsx` |
 | Browse canteens | `GET /api/canteens` returns only active canteens | `CanteenList.jsx` |
 | Browse a canteen menu | `GET /api/canteens/:id/menu` returns canteen and items | `CanteenMenu.jsx` |
 | Cart for one canteen | Cart saved in browser (`localStorage` keys `cart`, `cartCanteen`); switching canteen prompts | `CartContext.jsx`, `Cart.jsx` |
@@ -156,13 +156,13 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Create staff login for canteen(s) | `POST /api/admin/staff` |
 | Change which canteens a staff user manages | `PATCH /api/admin/users/:id/canteens` |
 | View/edit canteens and owners; unblock paid students | Admin overview and canteen/user endpoints |
-| Reset a canteen owner's password | `PATCH /api/admin/users/:id/password` |
+| Reset any account password after verifying identity | Admin panel reset form |
 | View sales report | Same report page/API with admin access to all canteens |
 | View/manage every canteen | `canManageCanteen` returns true for admin |
 
 ### D. Data and safety features
 - Server recalculates prices; order items store **snapshots** (name, price) so later menu changes do not alter old orders.
-- First no-show blocks immediately; a blocked student cannot place a new order. Staff must record payment of each relevant no-show order at the counter before unblocking.
+- First no-show blocks immediately; a blocked student cannot place a new order. Staff must record payment for every unpaid no-show order across all canteens before unblocking.
 - No online payment or separate fine is implemented.
 - Legacy orders without pickup codes can still be collected without a code.
 
@@ -172,13 +172,13 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 
 | Role | Can do | Pages | Restrictions |
 |---|---|---|---|
-| `student` / `teacher` | Browse, order, view/reorder own orders, change password | `/`, `/canteen/:id`, `/cart`, `/orders`, `/account` | Cannot open staff/admin pages; one active order at a time; blocked after first no-show |
+| `student` / `teacher` | Browse, order, view/reorder own orders, edit profile, change password | `/`, `/canteen/:id`, `/cart`, `/orders`, `/account` | Cannot open staff/admin pages; one active order at a time; blocked after first no-show |
 | `canteen` (staff) | Manage orders/menu for assigned canteens; update open state; review blocked users and sales | plus `/dashboard`, `/manage-menu`, `/blocked`, `/report` | Other canteens return 403; no `/admin` |
 | `admin` | Manage all canteens, staff, blocked accounts, owner resets and reports | plus `/admin`, staff pages | High privilege; protect the account |
 
 **Authentication** = checking *who you are* (login, JWT). **Authorization** = checking *what you may do* (roles and canteen ownership).
 
-- Authentication: `protect` middleware reads `Authorization: Bearer <jwt>`, verifies it, then loads the user from the database on **every** request (so `managedCanteens` is always fresh).
+- Authentication: `protect` reads the HttpOnly auth cookie, verifies it, and reloads the user on every request so current roles and canteen ownership are checked.
 - Authorization: `authorize(...roles)` checks the role; `canManageCanteen(user, canteenId)` is `true` for admin, and for staff only if the canteen is in their `managedCanteens`.
 - Registration **never** sets a role. Only `makeAdmin.js` (run by the developer) or `POST /api/admin/staff` (admin) can create privileged accounts.
 
@@ -190,7 +190,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 |---|---|---|
 | **React** (Vite, JSX) | UI library | All pages and components in `client/src` |
 | **react-router-dom** | Page routing | Routes like `/dashboard`; `ProtectedRoute` guards them |
-| **Axios** | HTTP client | `client/src/api.js` default instance with base URL `VITE_API_URL` and an interceptor that attaches the saved token |
+| **Axios** | HTTP client | `client/src/api.js` uses `VITE_API_URL` when set, otherwise the same-origin `/api`, and sends the HttpOnly-cookie session |
 | **Plain CSS** | Styling | `client/src/index.css` (classes `card`, `order-card`, `dash-grid`...) |
 | **Node.js** | JS runtime | Runs the server |
 | **Express** | Web framework | Routes, middleware, JSON API (`server.js`) |
@@ -199,7 +199,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | **jsonwebtoken (JWT)** | Signed login tokens | Payload includes user id, role, and token version |
 | **bcryptjs** | Password hashing | Passwords are stored as `passwordHash` |
 | **dotenv** | Loads `.env` | Secrets and config |
-| **cors** | Cross-origin rules | Allows the client URL(s) listed in `CLIENT_URL` |
+| **cors** | Cross-origin rules | Allows `CLIENT_URL` origins locally; on Render the service's own `RENDER_EXTERNAL_URL` is allowed automatically |
 | **Socket.IO** (server) and **socket.io-client** | Live two-way messages | New orders and status changes pushed instantly |
 | **Web Audio API** | Browser sound | The new-order beep in `sound.js` |
 | **Notification API** | Browser alerts | "Order ready" alert on My Orders |
@@ -217,8 +217,8 @@ flowchart LR
     C[Customer browser] --> R[React frontend]
     S[Staff browser] --> R
     A[Admin browser] --> R
-    R -- "HTTP + JSON (Axios, Bearer JWT)" --> E[Express server]
-    R -- "WebSocket (Socket.IO, JWT in auth.token)" --> IO[Socket.IO server]
+    R -- "HTTP + JSON (Axios, HttpOnly cookie)" --> E[Express server]
+    R -- "WebSocket (Socket.IO, HttpOnly cookie)" --> IO[Socket.IO server]
     E --> MW[protect / authorize / canManageCanteen]
     MW --> CT[Controllers: auth, menu, order, canteen, admin]
     CT --> DB[(MongoDB Atlas)]
@@ -247,7 +247,7 @@ Student / Staff / Admin browser
 
 **Polling** (a timer calling the API every 30s) still exists in Dashboard and My Orders as a safety net if the socket drops.
 
-**What happens when you click "Mark ready":** React calls `api.patch('/orders/:id/status')` → Axios adds the token → Express runs `protect` → `authorize` → `updateStatus` checks ownership and allowed transition → saves to MongoDB → calls `notifyOrder` (socket push) → returns JSON → Dashboard reloads the list.
+**What happens when you click "Mark ready":** React calls `api.patch('/orders/:id/status')` → the browser sends its HttpOnly cookie → Express runs `protect` → `authorize` → `updateStatus` checks ownership and allowed transition → saves to MongoDB → calls `notifyOrder` (socket push) → returns JSON → Dashboard reloads the list.
 
 ---
 
@@ -259,11 +259,11 @@ Student / Staff / Admin browser
 | File | Responsibility |
 |---|---|
 | `App.jsx` | Route table, wraps pages in providers/layout |
-| `api.js` | Axios instance (base URL from `VITE_API_URL`, adds `Authorization` header from `localStorage` token) and `errorMessage(err)` helper |
-| `socket.js` | `connectSocket()` (reuses one connection, sends token in `auth`), `disconnectSocket()`. Socket URL = `VITE_API_URL` without trailing `/api` |
+| `api.js` | Axios instance (uses `VITE_API_URL` or same-origin `/api`, sends credentials for the HttpOnly auth cookie) and `errorMessage(err)` helper |
+| `socket.js` | `connectSocket()` (reuses one cookie-authenticated connection), `disconnectSocket()`. Uses same-origin Socket.IO unless `VITE_API_URL` points to a separate API |
 | `sound.js` | `enableSound()` (must be called from a click; resumes the AudioContext) and `beep()` (880 Hz tone, 0.5 s) |
 | `useStaffCanteen.js` | Hook: loads the canteens a staff user may manage (admin: all), remembers the selected `canteenId` |
-| `context/AuthContext.jsx` | Holds `user`, `loading`, `login`, `register`, `logout`; restores session from the saved token on page load; closes the socket when `user` becomes empty |
+| `context/AuthContext.jsx` | Holds `user`, `loading`, `login`, `register`, `logout`; restores session through `/auth/me` using the HttpOnly cookie; closes the socket when `user` becomes empty |
 | `context/CartContext.jsx` | Cart items, the single cart canteen, `addItem(menuItem, canteen)`, saved in `localStorage` |
 | `components/Layout.jsx`, `Navbar.jsx` | Page frame and navigation |
 | `components/ProtectedRoute.jsx` | Redirects if not logged in / wrong role |
@@ -277,7 +277,7 @@ Student / Staff / Admin browser
 | `CanteenMenu.jsx` | `/canteen/:id` | Menu and add-to-cart |
 | `Cart.jsx` | `/cart` | Shows "Ordering from X", pickup slots and note; closed canteens are blocked in UI and server |
 | `MyOrders.jsx` | `/orders` | Current and past orders, pickup code, cancel, reorder, late notice, live updates |
-| `AccountSettings.jsx` | `/account` | Change the signed-in user's password |
+| `AccountSettings.jsx` | `/account` | View/edit profile details and change the signed-in user's password |
 | `Dashboard.jsx` | `/dashboard` | Staff order board |
 | `ManageMenu.jsx` | `/manage-menu` | Staff menu editor |
 | `BlockedStudents.jsx` | `/blocked` | Record no-show order payments and unblock users |
@@ -313,7 +313,7 @@ The older `Menu.jsx` file is not connected to the current route table.
 
 **What it is:** the server that holds the rules and the database connection. Browsers can be tampered with, so *every* rule is enforced here.
 
-**Startup (`server.js`):** loads `.env`, builds the Express app with `cors` (from `CLIENT_URL`, comma-separated) and `express.json()`, registers routes, adds a 404 handler and a central error handler, connects to MongoDB, then creates an HTTP server (`http.createServer(app)`), attaches Socket.IO with `initSocket(server)`, and listens on `PORT` (default 5001).
+**Startup (`server.js`):** loads `.env`, checks required environment variable names, configures Helmet, CORS and allowed-Origin checks, and limits JSON bodies to 100 KB. It registers routes and safe error handling, connects to MongoDB, then creates the HTTP server, attaches cookie-authenticated Socket.IO, and listens on `PORT` (default 5001).
 
 ### Backend files
 | File | Purpose |
@@ -350,7 +350,7 @@ The older `Menu.jsx` file is not connected to the current route table.
 | `markNoShow` | Atomically changes a ready order to no-show; increments the user count and blocks at the first no-show |
 
 ### `socket.js` functions (verified)
-- `initSocket(server)` – creates the Socket.IO server with CORS from `CLIENT_URL`. A middleware verifies the JWT and current token version, loads the user from the DB, and rejects invalid sessions. On connect, the socket joins `user:<id>`. `joinCanteen` validates the id and `canManageCanteen`; `leaveCanteen` leaves the room.
+- `initSocket(server)` – creates the Socket.IO server with credentialed CORS from `CLIENT_URL`. A middleware verifies the HttpOnly-cookie JWT and current token version, loads the user from the DB, and rejects invalid sessions. On connect, the socket joins `user:<id>`. `joinCanteen` validates the id and `canManageCanteen`; `leaveCanteen` leaves the room.
 - `emitToUser`, `emitToCanteen` – send an event to a room.
 - `notifyOrder(order, event)` – sends `{orderId, orderNumber, status, paymentStatus, canteenId}` (never the pickup code). `newOrder` goes only to the canteen room; `orderUpdated` goes to the canteen room and the student's room.
 
@@ -364,7 +364,7 @@ The older `Menu.jsx` file is not connected to the current route table.
 | Model | Stores | Fields |
 |---|---|---|
 | `Canteen` | A canteen | `name`, unique `slug`, `logo`, `description`, `location`, `isOpen`, `isActive`, `slotLimit`, `avgPrepMins`, `createdAt` |
-| `User` | Accounts | `name`, unique `email`, `phone`, hidden `passwordHash`/`tokenVersion`, `role`, `managedCanteens`, `noShowCount`, `isBlocked`, `blockedAt`, `createdAt` |
+| `User` | Accounts | `name`, unique `email`, `phone`, optional `rollNumber`, `department`, `year`, `avatarUrl`, hidden `passwordHash`/`tokenVersion`, `role`, `managedCanteens`, `noShowCount`, `isBlocked`, `blockedAt`, `createdAt` |
 | `MenuItem` | Food items | `canteen`, `name`, `price`, `category`, image URL, `isAvailable`, `isSpecial`, `prepTimeMins` |
 | `Order` | Orders | `canteen`, per-canteen `orderNumber`, `user`, item price/name snapshots, `total`, `pickupTime`, `status`, separate `paymentStatus`, hidden `pickupCode`/`codeAttempts`, `createdAt`, `readyAt`, `lateExtended`, `note` |
 | `Counter` | Order-number counter | `_id` = `"<canteenId>:<YYYY-MM-DD>"`, `seq` |
@@ -443,7 +443,7 @@ stateDiagram-v2
 
 The automatic no-show check runs every minute and marks an order after it has been ready for 20 minutes (30 minutes after the student uses the one-time late extension). Staff can also manually mark an order while it is ready. Both paths use the same `markNoShow` operation; the ready-only database update prevents the same order being counted twice. The first no-show blocks the account. Staff record the full order total as paid at the counter for each no-show order before unblocking; no separate fine or online payment exists.
 
-**Pickup slots:** the client displays the next 12 ten-minute slots. The server counts active orders for that canteen and slot and rejects an order when `slotLimit` is reached. The count and order insert are separate operations, so simultaneous requests can still race; see limitations.
+**Pickup slots:** the client displays the next 12 ten-minute slots. The server checks active orders and creates a new order in a MongoDB transaction after writing to the user and canteen lock documents. This serializes competing submissions for the same user/canteen; verify transaction behavior against the actual Atlas deployment.
 
 **Multi-canteen rules:** each menu item and order belongs to a canteen; staff access is checked against `managedCanteens` on protected actions. A cart contains one canteen only. The server identifies that canteen from the requested menu items and recalculates all prices from MongoDB, rather than trusting browser-sent prices.
 
@@ -451,15 +451,18 @@ The automatic no-show check runs every minute and marks an order after it has be
 
 ## 13. API Reference
 
-All responses are JSON. Errors look like `{ "message": "..." }`. Protected routes need `Authorization: Bearer <token>`.
+All responses are JSON. Errors look like `{ "message": "..." }`. Protected browser requests use the HttpOnly auth cookie; unsafe methods require an allowed `Origin` from `CLIENT_URL`.
 
 | Method | Endpoint | Purpose | Who can call it |
 |---|---|---|---|
 | GET | `/api/health` | API and MongoDB connection health | Public |
 | POST | `/api/auth/register` | Register an account; new registrations get the student role | Public |
 | POST | `/api/auth/login` | Sign in | Public |
+| POST | `/api/auth/logout` | Clear the auth cookie | Public, Origin-checked |
 | GET | `/api/auth/me` | Current user profile/block state | Logged-in user |
+| PATCH | `/api/auth/me` | Edit own name, email, phone, and optional profile details | Logged-in user; current password required to change email |
 | PATCH | `/api/auth/password` | Change own password | Logged-in user |
+| PATCH | `/api/admin/users/password` | Reset an account password after offline identity verification | Admin |
 | GET | `/api/canteens` | Active canteens with rush/wait estimate | Public |
 | GET | `/api/canteens/:id` | Read active canteen | Public |
 | GET | `/api/canteens/:id/menu` | Menu, Popular tags, rush/wait estimate | Public |
@@ -468,7 +471,7 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected route
 | PATCH | `/api/canteens/:id` | Edit canteen fields/active state | Admin |
 | PATCH | `/api/canteens/:id/open` | Open or close a canteen | Assigned staff/admin |
 | GET | `/api/canteens/:id/blocked` | Blocked users with no-show orders at the canteen | Assigned staff/admin |
-| PATCH | `/api/canteens/:id/unblock/:userId` | Unblock after this canteen's no-show orders are paid | Assigned staff/admin |
+| PATCH | `/api/canteens/:id/unblock/:userId` | Unblock after all of the user's unpaid no-show orders are paid | Assigned staff/admin |
 | GET | `/api/menu?canteen=<id>` | Read menu items; canteen filter optional | Public |
 | POST | `/api/menu` | Create menu item | Assigned staff/admin |
 | PATCH | `/api/menu/:id` | Edit item fields/availability/special flag | Assigned staff/admin |
@@ -486,16 +489,20 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected route
 | POST | `/api/admin/staff` | Create staff account and assign canteens | Admin |
 | PATCH | `/api/admin/users/:id/canteens` | Change staff canteen assignments | Admin |
 | PATCH | `/api/admin/users/:id/unblock` | Admin unblock after no-show orders are paid | Admin |
-| PATCH | `/api/admin/users/:id/password` | Reset canteen owner's password | Admin |
+| PATCH | `/api/admin/users/:id/password` | Reset a canteen owner's password | Admin |
 
 `Assigned staff` means a canteen-role user whose `managedCanteens` includes the target canteen. Admin can manage every canteen. No route accepts or processes online payments.
 
 **Common errors:** 400 invalid input/transition, 401 missing or invalid login, 403 forbidden/blocked user, 404 not found, 409 conflict (including a full slot or active order), and 429 when a caller tries again after using all five pickup-code attempts.
 
+Forgot-password recovery is admin-assisted; no email or SMS reset is configured. The admin must verify the user's identity outside the app, set a temporary password in the Admin page, and share it securely. The user can then sign in and change it in Account settings. Do not send passwords in chat.
+
 **Example: place an order (fictional)**
+Use a cookie jar populated by a successful login request.
 ```bash
 curl -X POST http://localhost:5001/api/orders \
-  -H "Authorization: Bearer <your-token>" \
+  -b cookiejar -c cookiejar \
+  -H "Origin: http://localhost:5173" \
   -H "Content-Type: application/json" \
   -d '{"items":[{"menuItemId":"665f0b002a9b4c0012ab0050","qty":2}],"pickupTime":"2026-10-30T07:30:00.000Z"}'
 ```
@@ -532,17 +539,19 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 
 **Current implementation**
 - Passwords hashed with `bcryptjs`; `passwordHash` is `select: false` and never returned.
-- JWT with payload containing user id, role, and token version; user reloaded from DB on every request. Password changes/resets increment the version and invalidate older sessions.
+- JWT with payload containing user id, role, and token version, stored in an HttpOnly cookie; user reloaded from DB on every request. Password changes/resets increment the version and invalidate older sessions.
+- Unsafe browser methods require an `Origin` matching an entry in `CLIENT_URL`; CORS allows credentials for those origins.
 - Role checks (`authorize`) and per-canteen checks (`canManageCanteen`) on staff endpoints.
 - Ids validated with `mongoose.isValidObjectId`.
-- Prices computed by the server; quantities limited to 1-20.
+- Prices computed by the server; each item quantity and merged duplicate quantity are limited to 1-20, with at most 20 submitted item lines.
 - Pickup code: secure random, hidden from staff and from non-active orders, 5 wrong attempts then 429.
-- Socket connections require a valid JWT; room joins are ownership-checked.
+- Socket connections require a valid cookie JWT; room joins are ownership-checked.
 - CORS limited to the origins listed in `CLIENT_URL`; the same setting is used by Socket.IO.
+- JSON request bodies are capped at 100 KB; production 5xx responses hide internal messages, and logs omit error details.
 - Passwords are hashed; registration requires name, email, phone, and a password of at least six characters. Registration always creates the default student role.
 - Secrets are read from environment variables; never commit local `.env` files.
 
-**Not implemented:** Helmet security headers, API rate limits (including login/register), broader schema-level request validation, and automated database-backed authorization tests. The browser stores JWTs in `localStorage`. See [the route audit](./docs/SECURITY-ROUTE-AUDIT.md).
+**Not implemented:** rate limits beyond login/register and pickup verification, broader schema-level request validation, and automated database-backed authorization tests. Helmet security headers are enabled. Login is limited to 10 attempts per IP per 15 minutes; registration to 5 per IP per hour; failed pickup-code verification is limited to 30 attempts per staff account per 15 minutes (successful collections do not count). Rate-limit counters use an in-memory store and reset on server restart. Auth uses an HttpOnly cookie and unsafe browser requests are checked against the configured origins. The planned single-origin Render setup avoids cross-site cookie restrictions. See [the route audit](./docs/SECURITY-ROUTE-AUDIT.md).
 
 ---
 
@@ -626,9 +635,10 @@ The safe templates are `server/.env.example` and `client/.env.example`. Copy the
 |---|---|
 | `MONGO_URI` | Server; MongoDB connection |
 | `JWT_SECRET` | Server auth and Socket.IO token signing/verification |
-| `CLIENT_URL` | Server CORS and Socket.IO allowed origins |
+| `CLIENT_URL` | Optional comma-separated browser origins for local/separate-client hosting; Render automatically allows its own `RENDER_EXTERNAL_URL` |
 | `PORT` | Server listen port; defaults to 5001 |
-| `VITE_API_URL` | Client API and Socket.IO base URL |
+| `NODE_ENV` | Cookie security mode; use `development` locally, otherwise cookies default to Secure/SameSite=None |
+| `VITE_API_URL` | Optional client API base URL; leave unset when the client and server share one origin |
 
 `server/.env` is loaded by Docker Compose and `dotenv`. Keep the Atlas URI and JWT secret in that ignored local file or a secrets manager; do not put them in the Dockerfiles, Compose file, or GitHub Actions.
 
@@ -688,7 +698,7 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 | Docker says it cannot connect to the daemon | Docker Desktop/Engine is not running | Start Docker Desktop, wait for the engine, then rerun the Compose command |
 | `EADDRINUSE :::5001` | Old server still running | `lsof -i :5001`, then `kill <PID>` |
 | No `MongoDB connected` | Wrong URI or Atlas IP not allowed | Check `.env` and Atlas Network Access |
-| CORS error in browser | `CLIENT_URL` missing your client's origin | Add it (comma-separated), restart server |
+| CORS error in browser | `CLIENT_URL` missing your separate client's origin, or local origin mismatch | Add the exact origin to `CLIENT_URL`; same-origin Render hosting uses `RENDER_EXTERNAL_URL` automatically |
 | Socket error `Invalid token` | Not logged in or bad `JWT_SECRET` | Log in again, check env |
 | No beep | Sound not enabled | Click **Enable sound** once |
 | Blank page after edit | JSX syntax error (for example a duplicated `return (`) | Read the Vite terminal error |
@@ -698,21 +708,21 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 
 ## 21. Deployment
 
-**Current state: nothing is deployed.** The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pushes, pull requests, and manual dispatch. It uses Node.js 22 and both lockfiles; it runs backend tests and JS syntax checks, client build and lint, and builds both Docker images. There are no frontend tests configured, so the workflow reports that rather than inventing tests. CI does not publish images, deploy, or connect to MongoDB.
+**Current state: nothing is deployed.** The selected setup is a single Render web service, which serves the React build, Express API, and Socket.IO from the same origin. This avoids third-party-cookie restrictions and does not require a custom domain. The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pushes, pull requests, and manual dispatch. It uses Node.js 22 and both lockfiles; it runs backend tests and JS syntax checks, client build and lint, and builds both Docker images. There are no frontend tests configured, so the workflow reports that rather than inventing tests. CI does not publish images, deploy, or connect to MongoDB.
 
 The frontend lint check currently reports React effect/state lint errors. CI will report the failure rather than skipping the configured lint command.
 
-Starter hosting configuration is in `render.yaml` and `vercel.json`; no deployment has been run or tested. For a future deployment, configure Atlas, set environment variables by name in Render/Vercel dashboards (never in Git), set the client API URL and server CORS origin, test HTTPS and Socket.IO through the proxy, rehearse backup restoration, finish API tests, and resolve CI lint failures. The current Compose Dockerfiles are development configurations, not production images.
+The Render blueprint in `render.yaml` builds the client and server and serves them together; `vercel.json` is an unused legacy configuration. To deploy, create a Render Blueprint from the `multi-canteen` branch, configure `MONGO_URI` and `JWT_SECRET` privately in the Render dashboard, and configure Atlas access for Render. Render supplies `RENDER_EXTERNAL_URL`; the server uses it for same-origin CORS and request-origin checks. `NODE_ENV=production` is set by the blueprint. No deployment has been run or tested yet. Verify the health route, login cookie, Socket.IO, and a test order before inviting users. Review backup restoration and resolve CI lint failures. The current Compose Dockerfiles are development configurations, not production images.
 
 ---
 
 ## 22. Limitations and Roadmap
 
 **Known limitations**
-- Slot capacity uses a count-then-insert check, so simultaneous order requests could exceed `slotLimit`.
-- No-show order status and user blocking are separate writes, not a transaction.
-- Login/register and all other routes have no rate limiting; Helmet headers are not configured.
-- The frontend stores the JWT in `localStorage`; no service worker is included.
+- Order submission uses a MongoDB transaction with per-user and per-canteen write locks; verify concurrent submissions against Atlas or a local replica set.
+- No-show order status, strike count, and blocking are updated in one MongoDB transaction.
+- Helmet security headers are enabled. Login/register have per-IP rate limits and failed pickup-code attempts have a per-staff rate limit; other routes have no rate limiting.
+- The frontend stores its auth JWT in an HttpOnly cookie; the selected single-origin Render setup avoids cross-site cookies. No service worker is included.
 - Frontend automated tests and database-backed API tests are not configured.
 - Real menu data, real-device tests, staff training, pilot, deployment, backup/restore rehearsal, and launch have not happened.
 - Root `.gitignore` is missing; service-specific `.gitignore` files currently ignore their local `.env` and `node_modules`.
@@ -721,11 +731,11 @@ Starter hosting configuration is in `render.yaml` and `vercel.json`; no deployme
 | Day | Feature |
 |---|---|
 | 19-21 | Code present; backend unit tests and frontend build pass. End-to-end testing remains. |
-| 22 | Route audit is documented; Helmet/rate limits and broader validation are **not done** (dependency approval required). |
+| 22 | Login/register limits, failed pickup-code throttling, and Helmet are implemented; limits on other sensitive routes and broader validation are **not done**. |
 | 23 | Basic responsive/touch styles are present; real 360px device review is **not done**. |
 | 24 | Test plan is written; real-phone and three-role testing is **not done**. |
 | 25-27 | Staff guide and pilot plan are written; real menu entry, training, pilot, and feedback are **not done**. |
-| 28-29 | Render/Vercel starter configuration exists; provider setup, deployment, and live Socket.IO testing are **not done**. |
+| 28-29 | Single-service Render blueprint exists; provider setup, deployment, Atlas integration, and live Socket.IO testing are **not done**. |
 | 30 | Go-live checklist exists; backup/rollback rehearsal and launch are **not done**. |
 
 These are code/configuration and preparation documents, not evidence that the app has been tested with CampusBites or deployed.
@@ -744,7 +754,7 @@ These are code/configuration and preparation documents, not evidence that the ap
 | Component / State / Hook | A piece of UI / data a component remembers / a React function like `useState` |
 | Middleware | Code that runs before a route, like checking the login token |
 | Authentication / Authorization | Who are you? / What may you do? |
-| JWT | A signed token the server gives you at login; you send it with every request |
+| JWT | A signed token stored in an HttpOnly cookie and sent by the browser with requests |
 | Hashing | One-way scrambling of passwords so the real password is never stored |
 | Schema / Model | Rules for a document's fields / the code object that uses them |
 | Collection / Document / ObjectId | Table-like group / one record / its unique id |
@@ -763,11 +773,11 @@ These are code/configuration and preparation documents, not evidence that the ap
 
 Riya (student) orders 2 sandwiches from Dominos. Staff member Karan works at Dominos.
 
-1. **Login.** `Login.jsx` calls `AuthContext.login` → `POST /api/auth/login`. The token is saved in `localStorage`; `api.js` now attaches it to every request. `connectSocket()` opens a socket when a page needs it, sending the token.
+1. **Login.** `Login.jsx` calls `AuthContext.login` → `POST /api/auth/login`. The server sets an HttpOnly cookie; `api.js` and `connectSocket()` send it without exposing the token to JavaScript.
 2. **Browse.** `CanteenList.jsx` → `GET /api/canteens`. She taps Dominos; `CanteenMenu.jsx` → `GET /api/canteens/:id/menu`.
 3. **Cart.** She presses **+** twice. `CartContext.addItem(menuItem, canteen)` stores the items and the canteen in React state and `localStorage`.
 4. **Order.** In `Cart.jsx` she picks 1:00 PM and presses place order. Axios sends `POST /api/orders` with `{items, pickupTime}`.
-5. **Server.** `protect` verifies the token and loads Riya. `createOrder` runs its checks, reads prices from MenuItem, calls `nextOrderNumber` (Counter increments → `A7`), saves the Order with a random code like `0427`, then calls `notifyOrder(order,'newOrder')` and returns 201.
+5. **Server.** `protect` verifies the cookie JWT and loads Riya. `createOrder` runs its checks in a transaction, reads current prices from MenuItem, increments the per-canteen/day Counter, saves the Order with a random code like `0427`, then calls `notifyOrder(order,'newOrder')` and returns 201.
 6. **Staff screen.** Karan's Dashboard is in room `canteen:<dominos id>`. It receives `newOrder`, calls `load()` (`GET /api/orders?canteen=<id>`), the list re-renders, and the beep plays.
 7. **Preparing / ready.** Karan presses **Start preparing**, then **Mark ready** → `PATCH /status`. `updateStatus` checks the allowed move, saves, emits `orderUpdated`.
 8. **Riya's phone.** `MyOrders.jsx` gets `orderUpdated`, reloads `GET /orders/my`, shows "Ready" with her code, and shows a browser notification if she allowed it.

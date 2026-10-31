@@ -8,6 +8,7 @@ services:
     environment:
       PORT: "5001"
       CLIENT_URL: http://localhost:5173
+      NODE_ENV: development
     ports:
       - "127.0.0.1:5001:5001"
     volumes:

@@ -8,13 +8,14 @@ const slotStart = (date) =>
   new Date(Math.floor(new Date(date).getTime() / SLOT_MS) * SLOT_MS);
 
 // how many active orders already use that slot in this canteen
-const countInSlot = (canteenId, date) => {
+const countInSlot = (canteenId, date, session) => {
   const start = slotStart(date);
-  return Order.countDocuments({
+  const query = Order.countDocuments({
     canteen: canteenId,
     status: { $in: ACTIVE },
     pickupTime: { $gte: start, $lt: new Date(start.getTime() + SLOT_MS) },
   });
+  return session ? query.session(session) : query;
 };
 
 module.exports = { SLOT_MS, slotStart, countInSlot };

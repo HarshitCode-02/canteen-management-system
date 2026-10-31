@@ -1,21 +1,30 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { errorMessage } from "../api";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { count, clearCart } = useCart();
+  const [logoutError, setLogoutError] = useState("");
   const isStaff = user.role === "canteen" || user.role === "admin";
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     clearCart();
-    logout();
+    setLogoutError("");
+    try {
+      await logout();
+    } catch (err) {
+      setLogoutError(errorMessage(err));
+    }
   };
 
   return (
     <nav className="navbar">
       <Link to="/" className="brand">Canteen</Link>
       <div className="nav-right">
+        {logoutError && <span className="error" role="alert">{logoutError}</span>}
         {isStaff && <Link to="/dashboard">Dashboard</Link>}
         {user.role === "admin" && <Link to="/admin">Admin</Link>}
         {isStaff && <Link to="/manage-menu">Manage Menu</Link>}

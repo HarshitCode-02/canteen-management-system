@@ -147,3 +147,31 @@ exports.resetStaffPassword = async (req, res, next) => {
     next(err);
   }
 };
+
+// PATCH /api/admin/users/password  body: { email, newPassword }
+exports.resetUserPassword = async (req, res, next) => {
+  try {
+    const { email, newPassword } = req.body || {};
+    if (
+      typeof email !== "string" ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    ) {
+      return res.status(400).json({ message: "Enter a valid account email" });
+    }
+    if (typeof newPassword !== "string" || newPassword.length < 6) {
+      return res.status(400).json({ message: "Temporary password must be at least 6 characters" });
+    }
+
+    const user = await User.findOne({ email: email.trim().toLowerCase() })
+      .select("+passwordHash +tokenVersion");
+    if (!user) return res.status(404).json({ message: "Account not found" });
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+    revokeUserSockets(user._id);
+    res.json({ message: "Password reset. Give the user their temporary password securely." });
+  } catch (err) {
+    next(err);
+  }
+};

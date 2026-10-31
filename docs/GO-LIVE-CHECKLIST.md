@@ -4,8 +4,9 @@
 
 - [ ] Create a separate production MongoDB database; do not point production at local/test data.
 - [ ] Restrict Atlas network access to the hosting provider's documented outbound addresses where possible; use a least-privilege database user.
-- [ ] Set `MONGO_URI`, a strong unique `JWT_SECRET`, and `CLIENT_URL` only in the hosting provider's secret/environment settings.
-- [ ] Set the Vercel `VITE_API_URL` to the HTTPS API URL ending in `/api`. This value is bundled into client assets and is not a secret.
+- [ ] Create the Render Blueprint from the reviewed `multi-canteen` branch; the one service serves the frontend, API, and Socket.IO from one origin.
+- [ ] Set `MONGO_URI` and a strong unique `JWT_SECRET` only in Render's private environment settings. The blueprint sets `NODE_ENV=production`; Render supplies `RENDER_EXTERNAL_URL`.
+- [ ] Leave `VITE_API_URL` unset for same-origin requests. `vercel.json` is legacy config and is not part of this deployment.
 - [ ] Confirm the Render health check waits for MongoDB readiness and Socket.IO works through the deployed proxy.
 - [ ] Test the app with student, staff, and admin roles, including two canteens, order lifecycle, pickup verification, counter payment, report totals, and password reset.
 - [ ] Verify backups can be restored to a separate database before relying on them. Check the current Atlas plan's backup/export capabilities.

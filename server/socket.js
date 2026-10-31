@@ -3,20 +3,25 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('./models/User');
 const { canManageCanteen } = require('./middleware/auth');
+const { readAuthCookie } = require('./middleware/authCookie');
+const { getAllowedOrigins } = require("./allowedOrigins");
 
 let io = null;
 
 function initSocket(server) {
   io = new Server(server, {
-    cors: { origin: process.env.CLIENT_URL.split(',') },
+    cors: {
+      origin: getAllowedOrigins(),
+      credentials: true,
+    },
   });
 
   // Verify the JWT on every connection
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth && socket.handshake.auth.token;
+      const token = readAuthCookie({ headers: socket.handshake.headers });
       if (!token) return next(new Error('No token'));
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
       const user = await User.findById(payload.id).select('+tokenVersion');
       if (!user) return next(new Error('User not found'));
       if ((payload.tokenVersion || 0) !== (user.tokenVersion || 0)) {

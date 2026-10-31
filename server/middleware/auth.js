@@ -1,18 +1,18 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { readAuthCookie } = require("./authCookie");
 
-// Requires a valid "Authorization: Bearer <jwt>" header
+// Requires a valid HttpOnly auth cookie.
 exports.protect = async (req, res, next) => {
   try {
-    const header = req.headers.authorization || "";
-    if (!header.startsWith("Bearer ")) {
+    const token = readAuthCookie(req);
+    if (!token) {
       return res.status(401).json({ message: "Not authorized, token missing" });
     }
-    const token = header.split(" ")[1];
 
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
     } catch {
       return res.status(401).json({ message: "Not authorized, token invalid or expired" });
     }

@@ -245,14 +245,13 @@ exports.unblockUser = async (req, res, next) => {
       return res.status(403).json({ message: "This student has no no-show at your canteen" });
     }
     const unpaidNoShow = await Order.exists({
-      canteen: id,
       user: userId,
       status: "no_show",
       paymentStatus: { $ne: "paid" },
     });
     if (unpaidNoShow) {
       return res.status(409).json({
-        message: "Confirm the counter payment for every no-show order at this canteen before unblocking the student",
+        message: "Confirm counter payment for every no-show order before unblocking the student",
       });
     }
     const user = await User.findOneAndUpdate(

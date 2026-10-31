@@ -3,6 +3,7 @@ import api, { errorMessage } from "../api";
 
 const EMPTY_CANTEEN = { name: "", location: "", description: "" };
 const EMPTY_STAFF = { name: "", email: "", phone: "", password: "", canteenId: "" };
+const EMPTY_RESET = { email: "", newPassword: "" };
 
 export default function AdminPanel() {
   const [canteens, setCanteens] = useState([]);
@@ -10,6 +11,7 @@ export default function AdminPanel() {
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [canteenEdits, setCanteenEdits] = useState({});
   const [ownerPasswords, setOwnerPasswords] = useState({});
+  const [resetForm, setResetForm] = useState(EMPTY_RESET);
   const [canteenForm, setCanteenForm] = useState(EMPTY_CANTEEN);
   const [staffForm, setStaffForm] = useState(EMPTY_STAFF);
   const [error, setError] = useState("");
@@ -176,6 +178,33 @@ export default function AdminPanel() {
     }
   };
 
+  const resetAccountPassword = async (e) => {
+    e.preventDefault();
+    if (resetForm.newPassword.length < 6) {
+      setError("Temporary password must be at least 6 characters");
+      return;
+    }
+    if (!window.confirm(`Reset the password for ${resetForm.email.trim()}? Their current sessions will be signed out.`)) {
+      return;
+    }
+
+    setBusy("password:account");
+    setError("");
+    setMessage("");
+    try {
+      const res = await api.patch("/admin/users/password", {
+        email: resetForm.email.trim(),
+        newPassword: resetForm.newPassword,
+      });
+      setMessage(res.data.message);
+      setResetForm(EMPTY_RESET);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <div>
       <h2>Admin</h2>
@@ -309,6 +338,34 @@ export default function AdminPanel() {
         </label>
         <button type="submit" disabled={busy === "staff"}>
           {busy === "staff" ? "Creating..." : "Create owner login"}
+        </button>
+      </form>
+
+      <form className="card wide" onSubmit={resetAccountPassword}>
+        <h3>Reset an account password</h3>
+        <p className="muted">Verify the person's identity outside the app before resetting.</p>
+        <label className="field">
+          Account email
+          <input
+            type="email"
+            required
+            value={resetForm.email}
+            onChange={(e) => setResetForm({ ...resetForm, email: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          Temporary password (min 6 characters)
+          <input
+            type="password"
+            minLength="6"
+            required
+            autoComplete="new-password"
+            value={resetForm.newPassword}
+            onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })}
+          />
+        </label>
+        <button type="submit" disabled={busy === "password:account"}>
+          {busy === "password:account" ? "Resetting..." : "Reset account password"}
         </button>
       </form>
 

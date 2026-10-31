@@ -3,12 +3,31 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
+const path = require("node:path");
 const { initSocket } = require('./socket');
+const csrfOrigin = require("./middleware/csrfOrigin");
+const securityHeaders = require("./middleware/securityHeaders");
+const errorHandler = require("./middleware/errorHandler");
+const serveClient = require("./middleware/serveClient");
+const { getAllowedOrigins } = require("./allowedOrigins");
+
+const missingEnvironment = ["MONGO_URI", "JWT_SECRET"]
+  .filter((name) => !process.env[name]);
+if (missingEnvironment.length > 0) {
+  throw new Error(`Missing required environment variables: ${missingEnvironment.join(", ")}`);
+}
 
 const app = express();
 
-app.use(cors({ origin: process.env.CLIENT_URL.split(',') }));
-app.use(express.json());
+app.set("trust proxy", 1);
+app.use(securityHeaders);
+const allowedOrigins = getAllowedOrigins();
+if (allowedOrigins.length === 0) {
+  throw new Error("Set CLIENT_URL or run on a host that provides RENDER_EXTERNAL_URL");
+}
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(csrfOrigin);
+app.use(express.json({ limit: "100kb" }));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -34,16 +53,14 @@ app.use("/api/canteens", canteenRoutes);
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
+serveClient(app, path.resolve(__dirname, "../client/dist"));
+
 // 404 handler for unknown routes
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Central error handler
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ message: err.message || 'Server error' });
-});
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5001;
 
@@ -57,6 +74,6 @@ mongoose
     require("./noShow").startNoShowJob();
   })
   .catch((err) => {
-    console.error('MongoDB connection failed:', err.message);
+    console.error("MongoDB connection failed", { errorName: err.name || "Error" });
     process.exit(1);
   });

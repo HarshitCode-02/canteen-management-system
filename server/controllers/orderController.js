@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const MenuItem = require("../models/MenuItem");
 const Counter = require("../models/Counter");
+const User = require("../models/User");
 const { canManageCanteen } = require("../middleware/auth");
 const ACTIVE = ["placed", "preparing", "ready"];
 const FINAL = ["collected", "cancelled", "no_show"];
@@ -12,13 +13,8 @@ const { notifyOrder } = require("../socket");
 const { countInSlot } = require("../slots");
 const { markNoShow } = require("../noShow");
 
-
-
-
-
-
-
-
+const MAX_ORDER_LINES = 20;
+const MAX_ITEM_QUANTITY = 20;
 
 // Counter key is today's date in India time, so numbers reset at midnight IST
 const todayKey = () =>
@@ -43,19 +39,26 @@ const publicOrder = (order) => {
   return obj;
 };
 
-const nextOrderNumber = async (canteenId) => {
+const nextOrderNumber = async (canteenId, session) => {
   const counter = await Counter.findOneAndUpdate(
     { _id: `${canteenId}:${todayKey()}` },
     { $inc: { seq: 1 } },
-    { upsert: true, returnDocument: "after" }
+    { upsert: true, returnDocument: "after", session }
   );
   return `A${counter.seq}`;
 };
 
+class OrderRequestError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
 // POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, pickupTime, note } = req.body;
+    const { items, pickupTime, note } = req.body || {};
 
     if (note !== undefined && typeof note !== "string") {
       return res.status(400).json({ message: "note must be text" });
@@ -71,6 +74,9 @@ exports.createOrder = async (req, res, next) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "items must be a non-empty array" });
     }
+    if (items.length > MAX_ORDER_LINES) {
+      return res.status(400).json({ message: `An order can contain at most ${MAX_ORDER_LINES} item lines` });
+    }
     if (!pickupTime) {
       return res.status(400).json({ message: "pickupTime is required" });
     }
@@ -85,73 +91,105 @@ exports.createOrder = async (req, res, next) => {
     // merge duplicate items and validate qty
     const wanted = new Map();
     for (const it of items) {
+      if (!it || typeof it !== "object" || Array.isArray(it)) {
+        return res.status(400).json({ message: "Each item must include a valid menuItemId and quantity" });
+      }
       const qty = Number(it.qty);
-      if (!mongoose.isValidObjectId(it.menuItemId) || !Number.isInteger(qty) || qty < 1 || qty > 20) {
-        return res.status(400).json({ message: "Each item needs a valid menuItemId and qty between 1 and 20" });
+      if (!mongoose.isValidObjectId(it.menuItemId) || !Number.isInteger(qty) || qty < 1 || qty > MAX_ITEM_QUANTITY) {
+        return res.status(400).json({ message: `Each item needs a valid menuItemId and qty between 1 and ${MAX_ITEM_QUANTITY}` });
       }
       const key = String(it.menuItemId);
-      wanted.set(key, (wanted.get(key) || 0) + qty);
+      const mergedQty = (wanted.get(key) || 0) + qty;
+      if (mergedQty > MAX_ITEM_QUANTITY) {
+        return res.status(400).json({ message: `Combined quantity for an item cannot exceed ${MAX_ITEM_QUANTITY}` });
+      }
+      wanted.set(key, mergedQty);
     }
 
-    const active = await Order.findOne({ user: req.user._id, status: { $in: ACTIVE } });
-    if (active) {
-      return res.status(409).json({ message: `You already have an active order (${active.orderNumber})` });
+    let order;
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // These transactional writes serialize competing orders for this user and canteen.
+        const user = await User.findOneAndUpdate(
+          { _id: req.user._id, isBlocked: { $ne: true } },
+          { $inc: { orderLockVersion: 1 } },
+          { new: true, session }
+        );
+        if (!user) {
+          throw new OrderRequestError(
+            403,
+            "You are blocked because of a no-show. Pay the full no-show order amount at the canteen counter and ask staff to record the payment and unblock you."
+          );
+        }
+
+        const active = await Order.findOne({
+          user: req.user._id,
+          status: { $in: ACTIVE },
+        }).session(session);
+        if (active) {
+          throw new OrderRequestError(409, `You already have an active order (${active.orderNumber})`);
+        }
+
+        const menuItems = await MenuItem.find({ _id: { $in: [...wanted.keys()] } }).session(session);
+        if (menuItems.length !== wanted.size) {
+          throw new OrderRequestError(400, "One or more menu items were not found");
+        }
+        const soldOut = menuItems.filter((item) => !item.isAvailable);
+        if (soldOut.length > 0) {
+          throw new OrderRequestError(400, `Sold out: ${soldOut.map((item) => item.name).join(", ")}`);
+        }
+        const canteenIds = new Set(menuItems.map((item) => String(item.canteen)));
+        if (!menuItems[0].canteen || canteenIds.size !== 1) {
+          throw new OrderRequestError(400, "All items must be from the same canteen");
+        }
+        const canteenId = menuItems[0].canteen;
+
+        const canteen = await Canteen.findOneAndUpdate(
+          { _id: canteenId, isActive: true, isOpen: true },
+          { $inc: { orderLockVersion: 1 } },
+          { new: true, session }
+        );
+        if (!canteen) {
+          const current = await Canteen.findById(canteenId).session(session);
+          if (!current || !current.isActive) throw new OrderRequestError(400, "This canteen is not available");
+          throw new OrderRequestError(400, `${current.name} is closed right now`);
+        }
+
+        const used = await countInSlot(canteenId, pickup, session);
+        if (used >= canteen.slotLimit) {
+          throw new OrderRequestError(409, "That pickup slot is full. Please choose another time.");
+        }
+
+        const orderItems = menuItems.map((item) => ({
+          menuItem: item._id,
+          name: item.name,
+          price: item.price,
+          qty: wanted.get(String(item._id)),
+        }));
+        const total = orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+        order = new Order({
+          canteen: canteenId,
+          orderNumber: await nextOrderNumber(canteenId, session),
+          user: req.user._id,
+          items: orderItems,
+          total,
+          pickupTime: pickup,
+          note: cleanNote,
+          pickupCode: makePickupCode(),
+        });
+        await order.save({ session });
+      });
+    } finally {
+      await session.endSession();
     }
 
-    const menuItems = await MenuItem.find({ _id: { $in: [...wanted.keys()] } });
-    if (menuItems.length !== wanted.size) {
-      return res.status(400).json({ message: "One or more menu items were not found" });
-    }
-    const soldOut = menuItems.filter((m) => !m.isAvailable);
-    if (soldOut.length > 0) {
-      return res.status(400).json({ message: `Sold out: ${soldOut.map((m) => m.name).join(", ")}` });
-    }
-    // all items must belong to exactly one canteen
-    const canteenIds = new Set(menuItems.map((m) => String(m.canteen)));
-    if (!menuItems[0].canteen || canteenIds.size !== 1) {
-      return res.status(400).json({ message: "All items must be from the same canteen" });
-    }
-    const canteenId = menuItems[0].canteen;
-
-    const canteen = await Canteen.findOne({ _id: canteenId, isActive: true });
-    if (!canteen) {
-      return res.status(400).json({ message: "This canteen is not available" });
-    }
-    if (!canteen.isOpen) {
-      return res.status(400).json({ message: `${canteen.name} is closed right now` });
-    }
-    if (!canteen.isOpen) {
-      return res.status(400).json({ message: `${canteen.name} is closed right now` });
-    }
-
-    const used = await countInSlot(canteenId, pickup);
-    if (used >= canteen.slotLimit) {
-      return res.status(409).json({ message: "That pickup slot is full. Please choose another time." });
-    }
-
-
-    // prices come from the DB, never from the client
-    const orderItems = menuItems.map((m) => ({
-      menuItem: m._id,
-      name: m.name,
-      price: m.price,
-      qty: wanted.get(String(m._id)),
-    }));
-    const total = orderItems.reduce((sum, i) => sum + i.price * i.qty, 0);
-
-    const order = await Order.create({
-      canteen: canteenId,
-      orderNumber: await nextOrderNumber(canteenId),
-      user: req.user._id,
-      items: orderItems,
-      total,
-      pickupTime: pickup,
-      note: cleanNote,
-      pickupCode: makePickupCode(),
-    });
     notifyOrder(order, "newOrder");
     res.status(201).json(order);
   } catch (err) {
+    if (err instanceof OrderRequestError) {
+      return res.status(err.status).json({ message: err.message });
+    }
     if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }

@@ -7,9 +7,7 @@ let socket = null;
 
 // Safe to call many times: reuses the existing connection
 export function connectSocket() {
-  const token = localStorage.getItem("token");
-  if (!token) return null;
-  if (!socket) socket = io(SOCKET_URL, { auth: { token } });
+  if (!socket) socket = io(SOCKET_URL, { withCredentials: true });
   return socket;
 }
 
