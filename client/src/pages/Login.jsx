@@ -10,6 +10,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,7 +37,25 @@ export default function Login() {
           onChange={(e) => setPassword(e.target.value)} required />
         <button disabled={busy}>{busy ? "Please wait..." : "Login"}</button>
       </form>
-      <p>New here? <Link to="/register">Create an account</Link></p>
+      <div className="login-links">
+        <span>New here? <Link to="/register">Create an account</Link></span>
+        <button
+          className="link-button"
+          type="button"
+          aria-expanded={showRecovery}
+          aria-controls="password-recovery"
+          onClick={() => setShowRecovery((shown) => !shown)}
+        >
+          Forgot password?
+        </button>
+      </div>
+      {showRecovery && (
+        <div className="recovery-panel" id="password-recovery">
+          <strong>Reset your password</strong>
+          <p>Contact your app administrator and verify your identity. They can set a temporary password for you.</p>
+          <p className="recovery-note">No reset email is sent. Never share your current password.</p>
+        </div>
+      )}
     </div>
   );
 }

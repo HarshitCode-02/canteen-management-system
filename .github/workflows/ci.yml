@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, test, and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix client
+
+      - name: Install backend dependencies
+        run: npm ci --prefix server
+
+      - name: Run frontend tests when configured
+        run: |
+          if node -e "process.exit(require('./client/package.json').scripts?.test ? 0 : 1)"; then
+            npm --prefix client run test
+          else
+            echo "::notice title=Frontend tests not configured::No frontend test script exists yet; frontend automated tests were not run."
+          fi
+
+      - name: Test backend
+        run: npm --prefix server test
+
+      - name: Validate backend JavaScript syntax
+        run: find server -type d -name node_modules -prune -o -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
+      - name: Build frontend
+        run: npm --prefix client run build
+
+      - name: Lint frontend
+        run: npm --prefix client run lint
+
+  docker:
+    name: Build Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build --tag canteen-server:ci ./server
+
+      - name: Build frontend image
+        run: docker build --tag canteen-client:ci ./client

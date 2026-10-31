@@ -1,12 +1,12 @@
 import axios from "axios";
 
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL });
+const apiBaseURL = import.meta.env.PROD
+  ? "/api"
+  : import.meta.env.VITE_API_URL || "/api";
 
-// attach the JWT to every request
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+const api = axios.create({
+  baseURL: apiBaseURL,
+  withCredentials: true,
 });
 
 export const errorMessage = (err) =>
