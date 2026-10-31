@@ -1,8 +1,9 @@
 import axios from "axios";
 
-const apiBaseURL = import.meta.env.PROD
-  ? "/api"
-  : import.meta.env.VITE_API_URL || "/api";
+// The frontend and API are deployed as separate Vercel projects.
+// In production, VITE_API_URL must point to the backend's /api base path.
+// Locally, fall back to the Vite proxy at /api.
+const apiBaseURL = import.meta.env.VITE_API_URL || "/api";
 
 const api = axios.create({
   baseURL: apiBaseURL,
