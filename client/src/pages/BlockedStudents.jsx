@@ -57,7 +57,7 @@ export default function BlockedStudents() {
     <div>
       <h2>{canteen?.name} blocked students ({students.length})</h2>
       <CanteenSwitcher canteens={canteens} canteenId={canteenId} onChange={setCanteenId} />
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       {students.length === 0 ? (
         <p className="muted">No blocked students from this canteen.</p>
@@ -71,12 +71,15 @@ export default function BlockedStudents() {
                 {s.blockedAt && <span className="muted"> · blocked {fmtDate(s.blockedAt)}</span>}
               </p>
               <p className="muted">Pay each order amount at the counter before unblocking:</p>
-              <ul>
+              <ul className="blocked-order-list">
                 {s.noShowOrders.map((o) => (
-                  <li key={o._id}>
-                    #{o.orderNumber} · ₹{o.total} · pickup {fmtDate(o.pickupTime)} ·{" "}
+                  <li className="blocked-order-row" key={o._id}>
+                    <div className="blocked-order-details">
+                      <b>Order #{o.orderNumber} · ₹{o.total}</b>
+                      <span className="muted">Pickup {fmtDate(o.pickupTime)}</span>
+                    </div>
                     {o.paymentStatus === "paid" ? (
-                      "Paid"
+                      <span className="blocked-paid" aria-label="Payment recorded">Paid</span>
                     ) : (
                       <button
                         className="small"
@@ -94,13 +97,14 @@ export default function BlockedStudents() {
                           }
                         }}
                       >
-                        Confirm counter payment
+                        Confirm payment
                       </button>
                     )}
                   </li>
                 ))}
               </ul>
               <button
+                className="blocked-unblock"
                 disabled={busyId === s._id || s.noShowOrders.some((order) => order.paymentStatus !== "paid")}
                 onClick={() => unblock(s)}
               >
