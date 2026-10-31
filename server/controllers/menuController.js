@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const MenuItem = require("../models/MenuItem");
 const Canteen = require("../models/Canteen");
 const { canManageCanteen } = require("../middleware/auth");
+const { loadVisibleRatings } = require("../services/reviewRatings");
+const { writeAudit } = require("../services/auditLog");
 
 const FIELDS = ["name", "price", "category", "image", "isAvailable","isSpecial", "prepTimeMins"];
 
@@ -22,7 +24,11 @@ exports.getMenu = async (req, res, next) => {
       filter.canteen = req.query.canteen;
     }
     const items = await MenuItem.find(filter).sort({ category: 1, name: 1 });
-    res.json(items);
+    const ratings = await loadVisibleRatings(items.map((item) => item._id));
+    res.json(items.map((item) => ({
+      ...item.toObject(),
+      rating: ratings.get(String(item._id)) || { average: null, count: 0 },
+    })));
   } catch (err) {
     next(err);
   }
@@ -55,6 +61,13 @@ exports.createItem = async (req, res, next) => {
     }
 
     const item = await MenuItem.create({ ...pick(req.body), canteen: canteenId });
+    await writeAudit(req, {
+      eventType: "menu.created",
+      entityType: "menuItem",
+      entityId: item._id,
+      canteen: item.canteen,
+      details: { priceAfter: item.price, isAvailable: item.isAvailable },
+    });
     res.status(201).json(item);
   } catch (err) {
     if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
@@ -74,8 +87,16 @@ exports.updateItem = async (req, res, next) => {
       return res.status(403).json({ message: "You cannot manage this canteen" });
     }
 
+    const previousPrice = item.price;
     Object.assign(item, pick(req.body)); // pick() never includes "canteen"
     await item.save();
+    await writeAudit(req, {
+      eventType: "menu.updated",
+      entityType: "menuItem",
+      entityId: item._id,
+      canteen: item.canteen,
+      details: { priceBefore: previousPrice, priceAfter: item.price, isAvailable: item.isAvailable },
+    });
     res.json(item);
   } catch (err) {
     if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
@@ -96,6 +117,12 @@ exports.deleteItem = async (req, res, next) => {
     }
 
     await item.deleteOne();
+    await writeAudit(req, {
+      eventType: "menu.deleted",
+      entityType: "menuItem",
+      entityId: item._id,
+      canteen: item.canteen,
+    });
     res.json({ message: "Menu item deleted" });
   } catch (err) {
     next(err);

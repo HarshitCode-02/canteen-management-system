@@ -6,6 +6,8 @@ BBDU college canteen pre-order platform built with MERN. Students and teachers c
 
 The owner reports the current multi-canteen app is deployed on Vercel and working. This repository cannot independently verify production URLs, environment settings, scheduler configuration, real-device behavior, or a successful canteen pilot. Do not claim real users or completed training unless confirmed.
 
+The Phase 2 implementation adds owner-issued expiring QR pickup, verified reviews and admin moderation, deterministic budget/canteen/assistant tools, a static-only PWA offline shell, and admin audit history. See [the website tutorial](./docs/WEBSITE_TUTORIAL.md) for role-based use and [the Phase 2 final report](./docs/PHASE_2_FINAL_REPORT.md) for implementation details and remaining handover checks.
+
 ## Safe working rules
 
 - Never request, print, or commit `.env` values, passwords, MongoDB URIs, JWTs, tokens, or API keys.
@@ -19,7 +21,7 @@ The owner reports the current multi-canteen app is deployed on Vercel and workin
 
 - `client/`: React JSX, Vite, React Router, Axios, plain CSS.
 - `server/`: Node.js, Express, MongoDB/Mongoose, JWT in an HttpOnly cookie, bcryptjs, CORS, Socket.IO and node-cron for long-running hosting.
-- `server/models/`: User, Canteen, MenuItem, Order, Counter.
+- `server/models/`: User, Canteen, MenuItem, Order, Counter, Review, AuditLog.
 - `server/controllers/`, `routes/`, `middleware/`: APIs and access control.
 - `server/test/`: built-in Node test runner (`node:test`).
 - `docs/`: phone test, staff guide, pilot, security route audit, go-live checklist.
@@ -33,6 +35,10 @@ The owner reports the current multi-canteen app is deployed on Vercel and workin
 - A cart/order belongs to one canteen. The server recalculates prices from MongoDB.
 - Order states: `placed -> preparing -> ready -> collected`; payment is tracked separately and is recorded at the counter.
 - Pickup codes are for the order owner and verified by staff; verification is rate-limited.
+- Ready orders can also use single-use QR pickup. Only a token hash is stored; the four-digit code remains the fallback.
+- Reviews require an owned collected order containing the reviewed item. Student/teacher Discover tools are deterministic and do not call paid AI services.
+- Admins can inspect filtered/paginated audit events. Audit details use an allowlist and exclude credentials, pickup codes, QR tokens, and free-form review text.
+- The service worker caches static assets and an offline page only; it never caches API responses or queues orders.
 - First recorded no-show blocks immediately. Staff record payment for all unpaid no-show orders before unblocking.
 - The default no-show timer is 20 minutes after ready (30 minutes after the running-late extension). On Vercel, an external trusted scheduler must call the protected `GET /api/internal/no-show` endpoint every minute with `CRON_SECRET`; in-process cron is not persistent in a serverless function.
 - Dashboard and My Orders poll every 30 seconds. Vercel builds disable Socket.IO; long-running server builds can use the cookie-authenticated socket feature.
@@ -53,7 +59,7 @@ npm --prefix client run lint
 npm --prefix client run build
 ```
 
-Backend tests are dependency-light and do not connect to production MongoDB. The client has no automated test runner yet. CI also checks backend JavaScript syntax and builds the development Docker images; it does not publish images or deploy. A green local build is not proof of live production behavior.
+Latest local checks on the Phase 2 feature branch: `npm --prefix server test` passed 67 tests; client lint and production build passed. Backend tests are dependency-light and do not connect to production MongoDB. The client has no automated test runner yet. Full npm audits report moderate issues in development tooling; production-only audits report zero vulnerabilities. CI also checks backend JavaScript syntax and builds the development Docker images; it does not publish images or deploy. A green local build is not proof of live production behavior.
 
 ## Handover priorities
 
@@ -63,6 +69,8 @@ Backend tests are dependency-light and do not connect to production MongoDB. The
 4. Confirm polling updates and the trusted minute no-show scheduler; verify block/payment/unblock behavior.
 5. Test the main flows on the actual staff phone and rehearse a rollback/backup restore.
 6. Only after the handover checks, prioritize measured pilot feedback over speculative features.
+
+Phase 2 items still requiring hands-on verification: MongoDB replica-set/index behavior, QR scanning over HTTPS, offline install/navigation on iOS/Android, Vercel production configuration, external no-show scheduler, and rollback/backup restoration.
 
 ## Suggested next development branch
 

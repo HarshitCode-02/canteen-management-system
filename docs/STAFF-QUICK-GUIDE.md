@@ -12,11 +12,12 @@
 1. A new order appears on the dashboard. Read its items, quantity, pickup time, and any note.
 2. Press **Start preparing** when work begins.
 3. Press **Mark ready** only when the order is ready at the counter.
-4. The student shows the four-digit pickup code from their order screen.
-5. Enter the code and press **Collect** only after handing over the order.
-6. Confirm **Payment received** only after cash or UPI is actually received at the counter. If payment is still due, leave it unchecked and use **Confirm payment** later.
+4. The student shows the short-lived QR on their ready-order screen or gives you the four-digit pickup code.
+5. To scan, press **Start QR scanner** and allow camera access. Camera scanning requires HTTPS and a supported browser; if it is unavailable or the QR cannot be used, enter the four-digit code on the order card.
+6. Press **Collect** only after server verification and handing over the order. QR collection is single-use.
+7. Confirm **Payment received** only after cash or UPI has actually been received at the counter. If payment is still due, leave it unchecked and use **Confirm payment** later.
 
-There is no online payment or delivery. Never ask a student for their password or login token.
+There is no online payment or delivery. Never ask a student for their password, login token, or a QR screenshot through chat.
 
 ## No-show and menu changes
 

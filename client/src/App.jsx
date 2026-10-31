@@ -13,6 +13,9 @@ import AdminPanel from "./pages/AdminPanel";
 import BlockedStudents from "./pages/BlockedStudents";
 import SalesReport from "./pages/SalesReport";
 import AccountSettings from "./pages/AccountSettings";
+import Discover from "./pages/Discover";
+import ReviewModeration from "./pages/ReviewModeration";
+import AdminAuditLogs from "./pages/AdminAuditLogs";
 
 
 
@@ -28,10 +31,34 @@ export default function App() {
         <Route path="/orders" element={<MyOrders />} />
         <Route path="/account" element={<AccountSettings />} />
         <Route
+          path="/discover"
+          element={
+            <ProtectedRoute roles={["student", "teacher"]}>
+              <Discover />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin"
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reviews"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <ReviewModeration />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/audit-logs"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminAuditLogs />
             </ProtectedRoute>
           }
         />

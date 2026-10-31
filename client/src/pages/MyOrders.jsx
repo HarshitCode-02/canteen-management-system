@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import { useCart } from "../context/CartContext";
 import api, { errorMessage } from "../api";
 import { connectSocket } from "../socket";
+import ReviewForm from "../components/ReviewForm";
 
 function LateButton({ order }) {
   const [busy, setBusy] = useState(false);
@@ -113,7 +115,44 @@ const fmtTime = (d) =>
 const fmtDate = (d) =>
   new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
-function OrderCard({ order, onCancel }) {
+function PickupQr({ order }) {
+  const [qr, setQr] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    api.post(`/orders/${order._id}/pickup-qr`)
+      .then((res) => {
+        if (active) setQr(res.data);
+      })
+      .catch((err) => {
+        if (active) setError(errorMessage(err));
+      });
+    return () => {
+      active = false;
+    };
+  }, [order._id]);
+
+  if (error) return <p className="error" role="alert">{error}</p>;
+  if (!qr) return <p className="muted" role="status">Preparing your pickup QR...</p>;
+
+  return (
+    <div className="pickup-qr">
+      <QRCodeSVG
+        value={qr.token}
+        size={180}
+        title={`Pickup QR for order ${order.orderNumber}`}
+      />
+      <div>
+        <b>QR pickup</b>
+        <p className="muted">Show this at the counter. The four-digit code is a fallback.</p>
+        <p className="muted">Valid until {fmtTime(qr.expiresAt)}.</p>
+      </div>
+    </div>
+  );
+}
+
+function OrderCard({ order, onCancel, reviewedItems, onReviewed }) {
   return (
     <div className={`order-card status-${order.status}`}>
       <div className="order-head">
@@ -148,6 +187,8 @@ function OrderCard({ order, onCancel }) {
         </p>
       )}
 
+      {order.status === "ready" && <PickupQr order={order} />}
+
       {order.status === "ready" && <LateButton order={order} />}
 
       <ul>
@@ -157,6 +198,19 @@ function OrderCard({ order, onCancel }) {
           </li>
         ))}
       </ul>
+
+      {order.status === "collected" && order.items.map((item, idx) => {
+        const menuItemId = String(item.menuItem?._id || item.menuItem || "");
+        return (
+          <ReviewForm
+            key={`${order._id}-${menuItemId || idx}`}
+            order={order}
+            item={item}
+            existingReview={reviewedItems[`${order._id}:${menuItemId}`]}
+            onReviewed={onReviewed}
+          />
+        );
+      })}
 
       <p className="muted">
         Total ₹{order.total} · Pickup around {fmtTime(order.pickupTime)} ·{" "}
@@ -182,6 +236,8 @@ export default function MyOrders() {
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [reviewedItems, setReviewedItems] = useState({});
+  const [reviewError, setReviewError] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -194,6 +250,35 @@ export default function MyOrders() {
       setLoading(false);
     }
   }, []);
+
+  const collectedOrderIds = useMemo(
+    () => orders.filter((order) => order.status === "collected").map((order) => order._id).join(","),
+    [orders]
+  );
+
+  useEffect(() => {
+    if (!collectedOrderIds) {
+      return;
+    }
+    let active = true;
+    api.get("/reviews/my", { params: { orders: collectedOrderIds } })
+      .then((res) => {
+        if (!active) return;
+        setReviewedItems(Object.fromEntries(res.data.reviews.map((review) => [
+          `${review.order}:${review.menuItem}`,
+          review,
+        ])));
+        setReviewError("");
+      })
+      .catch((err) => {
+        if (active) setReviewError(errorMessage(err));
+      });
+    return () => { active = false; };
+  }, [collectedOrderIds]);
+
+  const onReviewed = (orderId, menuItemId, review) => {
+    setReviewedItems((current) => ({ ...current, [`${orderId}:${menuItemId}`]: review }));
+  };
 
   // load now, then slow polling every 30 seconds (fallback if the socket drops)
   useEffect(() => {
@@ -274,6 +359,7 @@ export default function MyOrders() {
   return (
     <div>
       {error && <p className="error">{error}</p>}
+      {collectedOrderIds && reviewError && <p className="error" role="alert">{reviewError}</p>}
 
       {blocked && (
         <div className="blocked-banner">
@@ -298,14 +384,14 @@ export default function MyOrders() {
           No active order. <Link to="/">Browse the menu</Link>
         </p>
       ) : (
-        active.map((o) => <OrderCard key={o._id} order={o} onCancel={cancel} />)
+        active.map((o) => <OrderCard key={o._id} order={o} onCancel={cancel} reviewedItems={reviewedItems} onReviewed={onReviewed} />)
       )}
 
       <h2>Past orders</h2>
       {past.length === 0 ? (
         <p className="muted">Nothing here yet.</p>
       ) : (
-        past.map((o) => <OrderCard key={o._id} order={o} onCancel={cancel} />)
+        past.map((o) => <OrderCard key={o._id} order={o} onCancel={cancel} reviewedItems={reviewedItems} onReviewed={onReviewed} />)
       )}
     </div>
   );

@@ -24,6 +24,12 @@ const orderSchema = new mongoose.Schema({
   // generated on Day 8; never returned unless explicitly selected
   pickupCode: { type: String, select: false },
   codeAttempts: { type: Number, default: 0, select: false },
+  pickupQrHash: { type: String, select: false },
+  pickupQrExpiresAt: { type: Date, select: false },
+  collectedAt: { type: Date },
+  collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  paidAt: { type: Date },
+  paidBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   createdAt: { type: Date, default: Date.now },
   readyAt: { type: Date },
   lateExtended: { type: Boolean, default: false },
@@ -32,5 +38,6 @@ const orderSchema = new mongoose.Schema({
 
 orderSchema.index({ user: 1, status: 1 });
 orderSchema.index({ canteen: 1, status: 1 });
+orderSchema.index({ pickupQrHash: 1 }, { sparse: true, unique: true });
 
 module.exports = mongoose.model("Order", orderSchema);

@@ -8,6 +8,7 @@ const { initSocket } = require('./socket');
 const csrfOrigin = require("./middleware/csrfOrigin");
 const cronAuth = require("./middleware/cronAuth");
 const securityHeaders = require("./middleware/securityHeaders");
+const requestId = require("./middleware/requestId");
 const errorHandler = require("./middleware/errorHandler");
 const serveClient = require("./middleware/serveClient");
 const { getAllowedOrigins, isAllowedOrigin } = require("./allowedOrigins");
@@ -24,6 +25,7 @@ let databaseConnection;
 
 app.set("trust proxy", 1);
 app.use(securityHeaders);
+app.use(requestId);
 const allowedOrigins = getAllowedOrigins();
 if (allowedOrigins.length === 0 && process.env.VERCEL !== "1") {
   throw new Error("Set CLIENT_URL or run on a host that provides RENDER_EXTERNAL_URL or VERCEL_URL");
@@ -76,6 +78,12 @@ app.use("/api/canteens", canteenRoutes);
 
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
+
+const reviewRoutes = require("./routes/reviewRoutes");
+app.use("/api/reviews", reviewRoutes);
+
+const smartRoutes = require("./routes/smartRoutes");
+app.use("/api/smart", smartRoutes);
 
 app.get("/api/internal/no-show", cronAuth, async (req, res, next) => {
   try {

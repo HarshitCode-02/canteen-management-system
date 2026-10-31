@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api, { errorMessage } from "../api";
 import { useCart } from "../context/CartContext";
+import MenuItemReviews from "../components/MenuItemReviews";
 
 export default function CanteenMenu() {
   const { id } = useParams();
@@ -143,7 +144,11 @@ export default function CanteenMenu() {
                         </p>
                       )}
                       <p className="price">₹{m.price}</p>
+                      <p className="muted" aria-label={m.rating?.count ? `Average rating ${m.rating.average} out of 5 from ${m.rating.count} reviews` : "No ratings yet"}>
+                        {m.rating?.count ? `★ ${m.rating.average}/5 (${m.rating.count})` : "No ratings yet"}
+                      </p>
                       <p className="muted">~{m.prepTimeMins} min</p>
+                      <MenuItemReviews itemId={m._id} />
                     </div>
                     {!m.isAvailable ? (
                       <span className="badge">Sold out</span>

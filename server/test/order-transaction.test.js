@@ -7,6 +7,9 @@ const MenuItem = require("../models/MenuItem");
 const Order = require("../models/Order");
 const User = require("../models/User");
 const { createOrder } = require("../controllers/orderController");
+const mockAuditLog = require("../testUtils/auditMock");
+
+mockAuditLog(test);
 
 const response = () => ({
   statusCode: 200,
