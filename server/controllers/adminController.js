@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Canteen = require("../models/Canteen");
 const Order = require("../models/Order");
 const { emitToUser, revokeUserSockets } = require("../socket");
+const { writeAudit } = require("../services/auditLog");
 
 // GET /api/admin/overview
 exports.getAdminOverview = async (req, res, next) => {
@@ -56,6 +57,12 @@ exports.createStaff = async (req, res, next) => {
     const user = await User.create({
       name, email, phone, passwordHash, role: "canteen", managedCanteens: ids,
     });
+    await writeAudit(req, {
+      eventType: "staff.created",
+      entityType: "user",
+      entityId: user._id,
+      details: { role: user.role, canteenCount: ids.length },
+    });
     res.status(201).json(user);
   } catch (err) {
     if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
@@ -81,6 +88,12 @@ exports.assignCanteens = async (req, res, next) => {
 
     user.managedCanteens = ids;
     await user.save();
+    await writeAudit(req, {
+      eventType: "staff.canteens_changed",
+      entityType: "user",
+      entityId: user._id,
+      details: { canteenCount: ids.length },
+    });
     res.json(user);
   } catch (err) {
     next(err);
@@ -116,6 +129,11 @@ exports.unblockUser = async (req, res, next) => {
     ).select("name");
 
     if (!user) return res.status(404).json({ message: "Blocked student or teacher not found" });
+    await writeAudit(req, {
+      eventType: "user.unblocked",
+      entityType: "user",
+      entityId: user._id,
+    });
     emitToUser(req.params.id, "accountUpdated", {});
     res.json({ message: `${user.name} has been unblocked` });
   } catch (err) {
@@ -141,6 +159,12 @@ exports.resetStaffPassword = async (req, res, next) => {
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
+    await writeAudit(req, {
+      eventType: "user.password_reset",
+      entityType: "user",
+      entityId: user._id,
+      details: { role: user.role },
+    });
     revokeUserSockets(user._id);
     res.json({ message: "Password reset. Give the owner their temporary password securely." });
   } catch (err) {
@@ -169,6 +193,12 @@ exports.resetUserPassword = async (req, res, next) => {
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
+    await writeAudit(req, {
+      eventType: "user.password_reset",
+      entityType: "user",
+      entityId: user._id,
+      details: { role: user.role },
+    });
     revokeUserSockets(user._id);
     res.json({ message: "Password reset. Give the user their temporary password securely." });
   } catch (err) {

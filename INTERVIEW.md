@@ -4,7 +4,7 @@ Use this as a practice guide, not a script to memorize. The owner reports deploy
 
 ## 30-second pitch
 
-I built a MERN pre-order platform for college canteens. Students and teachers choose a canteen, browse its menu, select a pickup slot, and collect their order at the counter. There is no delivery or online payment. Staff manage orders, and admins manage canteens and staff. I used HttpOnly-cookie JWT authentication, per-canteen ownership checks, server-side price calculation, pickup codes, MongoDB, and polling with Socket.IO support outside Vercel. The owner reports the app is deployed on Vercel; real-device testing and a canteen pilot should only be claimed after they are completed.
+I built a MERN pre-order platform for college canteens. Students and teachers choose a canteen, browse its menu, select a pickup slot, and collect their order at the counter. There is no delivery or online payment. Phase 2 adds single-use QR pickup, verified reviews, budget-based suggestions, canteen comparison, a deterministic assistant, and admin audit history. I use HttpOnly-cookie JWT authentication, per-canteen ownership checks, server-side price calculation, MongoDB, and polling with Socket.IO support outside Vercel. The owner reports the app is deployed on Vercel; real-device testing and a canteen pilot should only be claimed after they are completed.
 
 ## Two-minute walkthrough
 
@@ -13,8 +13,9 @@ I built a MERN pre-order platform for college canteens. Students and teachers ch
 3. The cart holds one canteen's items. The student chooses one of the available pickup slots and can add a short note.
 4. The API checks the user, canteen status, item availability, active-order rule, and slot capacity. It looks up prices from MongoDB, saves item snapshots, increments a per-canteen/day counter, and creates a pickup code.
 5. The staff dashboard refreshes orders by polling. The code also supports authenticated Socket.IO rooms on long-running hosts; the Vercel client build disables Socket.IO.
-6. Staff move an order from placed to preparing to ready. The student shows the pickup code; staff verify it at collection and separately record cash/UPI received at the counter.
-7. Admins manage canteens, staff assignments, blocked users, owner password resets, and canteen reports. The first no-show blocks a student; staff record the full order amount as paid before unblocking.
+6. When the order is ready, the student can show a short-lived QR or the existing four-digit code. Staff verification is single-use; payment remains a separate counter action.
+7. After collecting an item, a student/teacher can review it. Discover offers bounded budget suggestions, matching canteen prices, and a deterministic assistant that only reads the signed-in user's order status.
+8. Admins manage canteens, staff assignments, blocked users, owner password resets, reviews, audit events, and reports. The first no-show blocks a student; staff record the full order amount as paid before unblocking.
 
 ## Architecture
 
@@ -37,7 +38,11 @@ The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 se
 - **Per-canteen daily order numbers:** `Counter` uses a document key combining canteen id and India-local date. `findOneAndUpdate` with `$inc` increments the sequence atomically, so separate canteens have independent numbers.
 - **Canteen ownership:** role middleware limits staff/admin endpoints, and controller checks use `canManageCanteen` for the target canteen/order. Staff can manage only their assigned canteens; admin can manage all.
 - **Price tampering:** the client sends menu item ids and quantities, not trusted prices. The server loads current menu prices and saves name/price snapshots in the order.
-- **Pickup code abuse:** the server generates a four-digit code with Node's secure `crypto.randomInt`; it hides the code from staff responses and limits verification to five wrong attempts per order. Further attempts return 429.
+- **Pickup verification:** the server generates a four-digit fallback code and also supports owner-issued random QR tokens. QR hashes (not raw tokens) are stored; tokens expire, assigned staff are checked, and an atomic state transition permits one collection. Failed code attempts are limited.
+- **Verified reviews:** a student/teacher must own a collected order containing the reviewed item. A unique index prevents duplicate reviews per order/item/user; hidden reviews do not affect public ratings.
+- **Bounded assistant/recommendations:** no external AI or paid service is called. Budget combinations use integer paise and capped search; order status uses only the authenticated user's active order.
+- **Audit trail:** consequential mutations record actor, role, target, request ID, and allowlisted metadata; passwords, pickup codes, QR tokens, and free-form review text are excluded.
+- **Offline/PWA:** the service worker caches static assets and an offline page only; it never caches authenticated API data or queues orders.
 - **Live updates:** the server authenticates Socket.IO connections with the cookie. Users join their own room; staff can join only assigned canteen rooms. The event payload excludes pickup codes. Vercel builds disable sockets, so the deployed UI uses polling.
 - **Slot limits:** order creation uses a MongoDB transaction and per-user/per-canteen write locks around active-order and slot checks. Unit tests cover the transaction path with stubs; concurrency still needs a database-backed test on a replica-set database.
 - **Single-to-multi-canteen migration:** the migration script creates/reuses CampusBites, assigns legacy menu items/orders without a canteen, assigns existing canteen staff, and copies old counters using the greater sequence. A backup and a test-database run are still important before any real migration.
@@ -64,8 +69,8 @@ The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 se
 8. **Can the browser choose the order price?** No. The server loads menu prices and calculates the total.
 9. **Why store item snapshots?** Old orders keep their original names and prices after menu edits.
 10. **How are order numbers generated?** An atomic MongoDB counter is scoped to a canteen and IST date.
-11. **How does pickup verification work?** Staff enter the student's code; the server checks it before marking the order collected.
-12. **How do you limit code guessing?** The code has five attempts; further verification attempts return 429.
+11. **How does pickup verification work?** The owner can show a short-lived QR token or the existing code; assigned staff verify it and the server atomically allows one collection.
+12. **How do you prevent QR exposure/replay?** Only a hash is stored, the token expires, the order must still be ready, and successful collection consumes it.
 13. **How do live updates work?** Vercel uses 30-second polling; the code also supports authenticated Socket.IO rooms on long-running hosts.
 14. **Why keep polling?** It is the deployed Vercel behavior and a fallback when sockets are unavailable or a phone sleeps.
 15. **How do pickup slots work?** They are ten-minute windows; the server checks active orders against `slotLimit` inside its order transaction.
@@ -79,6 +84,7 @@ The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 se
 
 - Built a React/Vite and Express/Mongoose pre-order platform with student, staff, and admin roles.
 - Implemented server-side order validation, menu-price recalculation, item snapshots, and pickup-code verification.
+- Added expiring single-use QR pickup, collected-order-verified reviews, deterministic budget/canteen tools, and admin audit history.
 - Added per-canteen order ownership, IST daily counters, ten-minute pickup slots, and 30-second polling; the code supports Socket.IO on long-running hosts.
 - Created staff sales reports and admin workflows for canteens, staff assignments, blocked users, and password resets.
 - Configured development Docker Compose, GitHub Actions validation, and Vercel deployment support. The owner reports the site is deployed; do not claim real users, phone testing, or a successful pilot without evidence.

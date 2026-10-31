@@ -39,6 +39,8 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 25. [Summary, Contributing, License](#25-summary-contributing-license)
 [Screenshots](#screenshots)
 
+**Handover guides:** [Full website tutorial for visitors, students, teachers, canteen owners/staff, and administrators](./docs/WEBSITE_TUTORIAL.md) · [Phase 2 final report](./docs/PHASE_2_FINAL_REPORT.md) · [Staff quick guide](./docs/STAFF-QUICK-GUIDE.md)
+
 ---
 
 ## 1. Introduction
@@ -67,7 +69,9 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Pickup verification with a 4-digit code | Implemented |
 | Cash/UPI payment confirmed manually at the counter | Implemented |
 | Open/closed switch, pickup-slot limits, no-show auto-blocking after one missed pickup | Implemented in code |
-| Order history, reorder, search, sales reports, admin controls, editable account profile/password, PWA manifest | Implemented in code |
+| Order history, reorder, search, sales reports, admin controls, editable account profile/password | Implemented in code |
+| One-time QR pickup, verified item reviews, budget suggestions, canteen comparison, deterministic assistant, admin audit log | Implemented in code; live workflows still need verification |
+| PWA offline shell | Static assets and offline page are configured; real-device install/offline behavior is not verified |
 | Docker development and GitHub Actions CI | Configured; local Docker startup not yet verified |
 | Real-device testing and CampusBites pilot | Not done |
 | Production deployment | Owner reports deployed on Vercel; live settings and production checks remain unverified here |
@@ -89,17 +93,18 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 2. The home page lists the **active canteens**. Tap one.
 3. On the canteen menu, press **+** on items to add them to the cart. (One cart can only hold items from **one canteen**. If you add from another canteen you are asked whether to switch.)
 4. Open **Cart**, choose a **pickup time**, and place the order. You can only have **one active order** at a time.
-5. Go to **My Orders**. You see your order number (like `A7`), its status, and your **4-digit pickup code** while the order is active.
+5. Go to **My Orders**. You see your order number (like `A7`), its status, and a **4-digit pickup code** while the order is active. When it is ready, you can also generate a short-lived pickup QR.
 6. You can **cancel** your own order only while its status is "placed".
-7. When status becomes **Ready**, go to the counter, tell the staff the code, and pay cash/UPI.
-8. A ready order not collected within the allowed time is marked no-show and blocks the account. Pay the full no-show order amount at that canteen's counter; staff record the payment and unblock the account.
-9. Optionally press **Enable notifications** on My Orders so the browser can alert you when the order is ready.
+7. When status becomes **Ready**, show the QR or tell the staff the four-digit code, then pay cash/UPI at the counter.
+8. After collecting an item, you can leave one verified review for it from My Orders.
+9. A ready order not collected within the allowed time is marked no-show and blocks the account. Pay the full no-show order amount at that canteen's counter; staff record the payment and unblock the account.
+10. Use **Discover** for budget suggestions, canteen comparisons, and deterministic menu/order help. Optionally enable order-ready notifications.
 
 ### As canteen staff
 1. Login with the account the admin created for your canteen.
 2. Open **Dashboard**. Press **Enable sound** once (browsers block sound until you click), so new orders beep.
 3. New orders appear automatically. Press **Start preparing**, then **Mark ready**.
-4. When the student arrives, type their **pickup code**, keep **Payment received** ticked if they paid, and press **Collect**.
+4. When the student arrives, scan their pickup QR or type their **pickup code**, keep **Payment received** ticked if they paid, and press **Collect**.
 5. If a collected order was not paid yet, press **Confirm payment** later.
 6. Use **Cancel** (placed/preparing orders) or **No-show** (ready orders) when needed. The first no-show blocks the student immediately.
 7. Open **Manage Menu** to add, edit, delete items, mark items sold out, and set today's special.
@@ -108,7 +113,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 
 ### As admin
 1. Login with your admin account (made with `makeAdmin.js`).
-2. Open **/admin** to create/edit canteens, assign staff, view blocked accounts, reset a canteen owner's password, and manage canteen availability.
+2. Open **/admin** to create/edit canteens, assign staff, view blocked accounts, reset a canteen owner's password, and manage canteen availability. Use **Review moderation** and **Audit log** for review visibility and recorded business actions.
 3. Use staff pages to view all canteens and reports; admin access is checked by the server.
 
 ---
@@ -125,11 +130,14 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Place order | Server re-reads prices from the DB, creates order and pickup code | `orderController.createOrder` |
 | Order number | `A1, A2...` per canteen per day (India time), using an atomic counter | `nextOrderNumber`, `Counter` model |
 | See pickup code | Returned only for active orders and only to the owner | `getMyOrders`, `MyOrders.jsx` |
+| QR pickup | Owner-only short-lived QR token; server stores a hash and staff collection is single-use; four-digit code remains available | `orderController`, `PickupScanner.jsx` |
 | Cancel order | Allowed only for the owner and only while `placed` | `cancelOrder` |
 | Live status | Socket event triggers a refetch; 30s polling backup | `MyOrders.jsx` |
 | Ready notification | Browser `Notification` API when status becomes `ready` and permission is granted | `MyOrders.jsx` |
 | Order history and reorder | Shows past orders; re-fetches current menu/prices and skips unavailable items | `MyOrders.jsx` |
 | Search, categories, images, popular/special labels | Menu image URL, name search, category chips, top-three popular items, staff-set special | `CanteenMenu.jsx` |
+| Verified item reviews | A student/teacher can review an item only after collecting an order that included it | `ReviewForm.jsx`, review API |
+| Discover tools | Bounded budget suggestions, same-item canteen comparisons, deterministic assistant | `Discover.jsx`, `/api/smart/*` |
 | Rush and estimated wait | Based on current placed/preparing order count and canteen prep estimate | `canteenController` |
 | Pickup time and note | Choose from 12 upcoming 10-minute slots; optional note up to 100 characters | `Cart.jsx`, `createOrder` |
 
@@ -140,6 +148,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Live new-order push with beep | `Dashboard.jsx`, `sound.js`, `socket.js` |
 | Move order: placed → preparing → ready | `updateStatus` |
 | Verify pickup code and collect | `verifyAndCollect` |
+| Scan pickup QR | Camera starts only after staff chooses scan; manual code remains as fallback | `PickupScanner.jsx` |
 | Confirm payment separately | `confirmPayment` |
 | Cancel (placed/preparing) or mark no-show (ready) | `updateStatus` |
 | Call the student (phone link on card) | `Dashboard.jsx` |
@@ -159,6 +168,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | View/edit canteens and owners; unblock paid students | Admin overview and canteen/user endpoints |
 | Reset any account password after verifying identity | Admin panel reset form |
 | View sales report | Same report page/API with admin access to all canteens |
+| Moderate reviews and inspect audit events | Admin-only review moderation and paginated audit log | `/admin/reviews`, `/admin/audit-logs` |
 | View/manage every canteen | `canManageCanteen` returns true for admin |
 
 ### D. Data and safety features
@@ -284,6 +294,9 @@ Student / Staff / Admin browser
 | `BlockedStudents.jsx` | `/blocked` | Record no-show order payments and unblock users |
 | `SalesReport.jsx` | `/report` | Per-canteen sales/activity report |
 | `AdminPanel.jsx` | `/admin` | Canteen, staff-owner, and blocked-account administration |
+| `Discover.jsx` | `/discover` | Budget suggestions, canteen comparison, deterministic assistant |
+| `ReviewModeration.jsx` | `/admin/reviews` | Hide or restore verified reviews |
+| `AdminAuditLogs.jsx` | `/admin/audit-logs` | Filter and page through successful administrative/business events |
 
 The older `Menu.jsx` file is not connected to the current route table.
 
@@ -486,12 +499,22 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected brows
 | PATCH | `/api/orders/:id/cancel` | Cancel own placed order | Order owner |
 | PATCH | `/api/orders/:id/late` | One 10-minute extension while ready | Order owner |
 | PATCH | `/api/orders/:id/verify` | Verify pickup code and collect | Assigned staff/admin |
+| POST | `/api/orders/:id/pickup-qr` | Issue/rotate owner's ready-order QR token | Order owner |
+| POST | `/api/orders/verify-qr` | Verify a QR token and collect once | Assigned staff/admin |
 | PATCH | `/api/orders/:id/payment` | Record counter payment, including no-show payment | Assigned staff/admin |
+| GET | `/api/reviews/menu/:menuItemId` | List visible reviews for a menu item | Public |
+| GET | `/api/reviews/my` | List signed-in user's submitted reviews | Student/teacher |
+| POST | `/api/reviews` | Create review for an item in own collected order | Student/teacher |
+| POST | `/api/smart/meal-suggestions` | Return bounded available-menu combinations under a budget | Student/teacher |
+| POST | `/api/smart/assistant` | Deterministic menu/canteen/own-order help | Student/teacher |
 | GET | `/api/admin/overview` | Canteens, owners, blocked students/teachers | Admin |
 | POST | `/api/admin/staff` | Create staff account and assign canteens | Admin |
 | PATCH | `/api/admin/users/:id/canteens` | Change staff canteen assignments | Admin |
 | PATCH | `/api/admin/users/:id/unblock` | Admin unblock after no-show orders are paid | Admin |
 | PATCH | `/api/admin/users/:id/password` | Reset a canteen owner's password | Admin |
+| GET | `/api/admin/reviews` | Paginated review moderation list | Admin |
+| PATCH | `/api/admin/reviews/:id/moderation` | Hide or restore a review | Admin |
+| GET | `/api/admin/audit-logs` | Filter and paginate successful audit events | Admin |
 
 `Assigned staff` means a canteen-role user whose `managedCanteens` includes the target canteen. Admin can manage every canteen. No route accepts or processes online payments.
 
@@ -535,7 +558,7 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 
 **Vercel:** the client disables Socket.IO because the server is a function, and relies on the existing 30-second polling. A trusted external scheduler must call `GET /api/internal/no-show` every minute with `CRON_SECRET`; Vercel Hobby Cron is limited to once per day and is not frequent enough for the current no-show rule.
 
-**Limitation:** a PWA manifest/icon exists, but there is no service worker; mobile install/notification behavior still needs device testing.
+**PWA/offline behavior:** the production service worker caches only same-origin static assets and an offline page. It bypasses API and Socket.IO requests, and does not queue orders or cache account/order data. Installation, camera access, and offline navigation still need physical-device verification.
 
 ---
 
@@ -550,6 +573,8 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 - Prices computed by the server; each item quantity and merged duplicate quantity are limited to 1-20, with at most 20 submitted item lines.
 - Pickup code: secure random, hidden from staff and from non-active orders, 5 wrong attempts then 429.
 - Socket connections require a valid cookie JWT; room joins are ownership-checked.
+- Pickup QR tokens are random, short-lived, stored only as SHA-256 hashes, and consumed by a status-qualified atomic update. The four-digit code remains a fallback.
+- Audit events are server-derived and admin-only. Allowlisted details exclude free-form text, passwords, cookies, QR tokens, and pickup codes.
 - CORS allows configured `CLIENT_URL` origins plus supported Vercel/same-origin requests; Socket.IO uses configured origins on long-running hosts.
 - JSON request bodies are capped at 100 KB; production 5xx responses hide internal messages, and logs omit error details.
 - Passwords are hashed; registration requires name, email, phone, and a password of at least six characters. Registration always creates the default student role.
@@ -657,7 +682,7 @@ canteen-app/
 ├── .github/workflows/ci.yml
 ├── docker-compose.yml
 ├── client/
-│   ├── public/        PWA manifest and icon
+│   ├── public/        PWA manifest/icon, static-asset service worker, offline page
 │   └── src/
 │       ├── components/
 │       ├── context/
@@ -666,9 +691,9 @@ canteen-app/
 │       └── App.jsx, index.css
 ├── docs/              Phone plan, staff guide, pilot, security and go-live guides
 ├── server/
-│   ├── models/        User, Canteen, MenuItem, Order, Counter
-│   ├── controllers/   auth, menu, order, canteen, admin
-│   ├── routes/        authRoutes, menuRoutes, orderRoutes, canteenRoutes, adminRoutes
+│   ├── models/        User, Canteen, MenuItem, Order, Counter, Review, AuditLog
+│   ├── controllers/   auth, menu, order, canteen, admin, review, smart, audit
+│   ├── routes/        auth, menu, order, canteen, admin, review, smart
 │   ├── middleware/    auth.js
 │   ├── test/          Node built-in unit tests
 │   ├── server.js, socket.js, slots.js, noShow.js
@@ -690,9 +715,9 @@ npm --prefix client run build
 npm --prefix client run lint
 ```
 
-The backend has 45 dependency-light tests using Node's built-in test runner; they cover authorization helpers, origin checks, cron authentication, slots, report logic, and no-show/payment behavior without connecting to MongoDB. The client has no automated test script. The frontend ESLint command and production build are configured in CI. Docker image builds are a separate packaging check; CI does not deploy to Vercel.
+The backend has 67 dependency-light tests using Node's built-in test runner; they cover authorization, order transitions, QR pickup, reviews, smart tools, audit metadata, and existing security/report behavior without connecting to MongoDB. The client has no automated test script. The frontend ESLint command and production build are configured in CI. Docker image builds are a separate packaging check; CI does not deploy to Vercel.
 
-Not yet covered by automated tests: real HTTP/API integration with a disposable database, end-to-end student/staff/admin flows, cart UI, and React component behavior. Do not point tests at the production Atlas database.
+Not yet covered by automated tests: real HTTP/API integration with a disposable database, end-to-end student/staff/admin flows, camera permissions/scanning, cart UI, React component behavior, and actual service-worker/offline behavior. Do not point tests at the production Atlas database.
 
 For manual checks use separate test student, staff, and admin accounts; try a staff account against another canteen; test invalid order transitions and five wrong pickup codes; verify a no-show blocks immediately and that payment must be recorded before staff can unblock. Use browser DevTools Network to inspect calls. Never copy tokens into tickets or chat.
 
@@ -732,8 +757,10 @@ Before handing the system to canteen staff, check `/api/health`, student/staff/a
 - Order submission uses a MongoDB transaction with per-user and per-canteen write locks; verify concurrent submissions against Atlas or a local replica set.
 - No-show order status, strike count, and blocking are updated in one MongoDB transaction.
 - Helmet security headers are enabled. Login/register have per-IP rate limits and failed pickup-code attempts have a per-staff rate limit; other routes have no rate limiting.
-- The frontend session uses an HttpOnly cookie. When client and API are separate projects, confirm the deployed domains and browser cookie behavior; same-origin routing is preferable. No service worker is included.
-- Frontend automated tests and database-backed API tests are not configured.
+- The frontend session uses an HttpOnly cookie. When client and API are separate projects, confirm the deployed domains and browser cookie behavior; same-origin routing is preferable.
+- The service worker intentionally does not cache API/private data or queue orders. Physical-device install/offline and QR camera behavior remain unverified.
+- Frontend automated tests and database-backed API tests are not configured. MongoDB-backed transaction/index behavior remains unverified.
+- Full dependency audits report moderate issues in development-tool dependency trees (`minimatch` via client ESLint tooling and server `nodemon`). Production-only audits reported zero vulnerabilities. No forced dependency updates were applied.
 - The owner reports Vercel deployment and working flows; live health/login checks were not independently run from this workspace. Real-device tests, staff training, pilot, and backup/restore rehearsal still need confirmation.
 - Verify the actual configured no-show scheduler and Vercel project environment settings before handover. Never commit `.env` files.
 
@@ -815,7 +842,7 @@ Screenshots are not included yet. Add screenshots only after testing with safe t
 
 **Skills shown:** REST API design, MongoDB modelling, JWT auth and role/ownership checks, atomic counters, WebSockets (Socket.IO rooms), React hooks and context, Git branching.
 
-**Implementation status:** Days 19–23 features are in the code. The owner reports the app is deployed on Vercel; real-device testing, staff training, pilot, backup/restore, and launch checks remain to be confirmed. See [Limitations and Roadmap](#22-limitations-and-roadmap).
+**Implementation status:** Phase 2 code includes atomic QR pickup, verified reviews/moderation, deterministic Discover tools, a static-only PWA offline shell, and admin audit logs. The owner reports the app is deployed on Vercel; real-device testing, staff training, pilot, database-backed checks, backup/restore, and launch checks remain to be confirmed. See [Limitations and Roadmap](#22-limitations-and-roadmap).
 
 **Contributing**
 1. Create a branch: `git checkout -b feature/your-change`.

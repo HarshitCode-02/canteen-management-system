@@ -8,6 +8,8 @@ const {
   resetUserPassword,
 } = require("../controllers/adminController");
 const { protect, authorize } = require("../middleware/auth");
+const { listAdminReviews, moderateReview } = require("../controllers/reviewController");
+const { listAuditLogs } = require("../controllers/auditController");
 
 const router = express.Router();
 
@@ -18,5 +20,8 @@ router.patch("/users/:id/canteens", assignCanteens);
 router.patch("/users/:id/unblock", unblockUser);
 router.patch("/users/password", resetUserPassword);
 router.patch("/users/:id/password", resetStaffPassword);
+router.get("/reviews", listAdminReviews);
+router.patch("/reviews/:id/moderation", moderateReview);
+router.get("/audit-logs", listAuditLogs);
 
 module.exports = router;

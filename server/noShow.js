@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Order = require("./models/Order");
 const User = require("./models/User");
 const { notifyOrder } = require("./socket");
+const { writeAudit } = require("./services/auditLog");
 
 const NO_SHOW_AFTER_MINS = 20;
 const LATE_EXTRA_MINS = 10; // one-time extra time from "I'm running late"
@@ -12,14 +13,15 @@ const MAX_STRIKES = 1;
 // The status filter makes it safe if the button and the timer fire together:
 // only one of them can change the order, so the strike is counted once.
 // extraFilter lets the timer re-check "is it still overdue?" in the same update.
-async function markNoShow(orderId, extraFilter = {}) {
+async function markNoShow(orderId, extraFilter = {}, req) {
   const session = await mongoose.startSession();
   let order;
+  let blockedUser;
   try {
     await session.withTransaction(async () => {
       order = await Order.findOneAndUpdate(
         { _id: orderId, status: "ready", ...extraFilter },
-        { status: "no_show" },
+        { $set: { status: "no_show" }, $unset: { pickupQrHash: 1, pickupQrExpiresAt: 1 } },
         { new: true, session }
       );
       if (!order) return;
@@ -33,6 +35,23 @@ async function markNoShow(orderId, extraFilter = {}) {
         user.isBlocked = true;
         user.blockedAt = new Date();
         await user.save({ session });
+        blockedUser = user;
+      }
+      await writeAudit(req, {
+        eventType: "order.no_show",
+        entityType: "order",
+        entityId: order._id,
+        canteen: order.canteen,
+        details: { fromStatus: "ready", toStatus: "no_show" },
+      }, session);
+      if (blockedUser) {
+        await writeAudit(req, {
+          eventType: "user.blocked",
+          entityType: "user",
+          entityId: blockedUser._id,
+          canteen: order.canteen,
+          details: { role: blockedUser.role },
+        }, session);
       }
     });
   } finally {

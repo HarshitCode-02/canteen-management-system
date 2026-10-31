@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import api, { errorMessage } from "../api";
 import useStaffCanteen from "../useStaffCanteen";
 import CanteenSwitcher from "../components/CanteenSwitcher";
+import PickupScanner from "../components/PickupScanner";
 import { connectSocket } from "../socket";
 import { enableSound, beep } from "../sound";
 
@@ -176,6 +177,13 @@ export default function Dashboard() {
         canteenId={canteenId}
         onChange={setCanteenId}
       />
+
+      {canteenId && (
+        <PickupScanner
+          key={canteenId}
+          onCollected={load}
+        />
+      )}
 
       {error && <p className="error">{error}</p>}
 

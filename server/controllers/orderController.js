@@ -12,6 +12,7 @@ const crypto = require("crypto");
 const { notifyOrder } = require("../socket");
 const { countInSlot } = require("../slots");
 const { markNoShow } = require("../noShow");
+const { writeAudit } = require("../services/auditLog");
 
 const MAX_ORDER_LINES = 20;
 const MAX_ITEM_QUANTITY = 20;
@@ -23,6 +24,8 @@ const todayKey = () =>
 // 4-digit code, e.g. "0427". crypto.randomInt is secure, unlike Math.random.
 const makePickupCode = () => String(crypto.randomInt(0, 10000)).padStart(4, "0");
 const MAX_CODE_ATTEMPTS = 5;
+const PICKUP_QR_TTL_MS = 30 * 60 * 1000;
+const hashPickupToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
 // allowed status changes through updateStatus ("collected" goes through the code check)
 const ALLOWED = {
@@ -36,6 +39,8 @@ const publicOrder = (order) => {
   const obj = order.toObject();
   delete obj.pickupCode;
   delete obj.codeAttempts;
+  delete obj.pickupQrHash;
+  delete obj.pickupQrExpiresAt;
   return obj;
 };
 
@@ -179,6 +184,13 @@ exports.createOrder = async (req, res, next) => {
           pickupCode: makePickupCode(),
         });
         await order.save({ session });
+        await writeAudit(req, {
+          eventType: "order.created",
+          entityType: "order",
+          entityId: order._id,
+          canteen: order.canteen,
+          details: { toStatus: order.status },
+        }, session);
       });
     } finally {
       await session.endSession();
@@ -210,6 +222,109 @@ exports.getMyOrders = async (req, res, next) => {
       return obj;
     });
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/orders/:id/pickup-qr (order owner, only while ready)
+exports.createPickupQr = async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+
+    const order = await Order.findOne({ _id: req.params.id, user: req.user._id })
+      .select("status readyAt");
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.status !== "ready") {
+      return res.status(409).json({ message: "QR pickup is available only when the order is ready" });
+    }
+
+    const readyAt = order.readyAt ? new Date(order.readyAt).getTime() : Date.now();
+    const expiresAt = new Date(readyAt + PICKUP_QR_TTL_MS);
+    if (expiresAt.getTime() <= Date.now()) {
+      return res.status(410).json({ message: "Pickup QR has expired; use the four-digit pickup code" });
+    }
+
+    const token = crypto.randomBytes(32).toString("base64url");
+    const updated = await Order.findOneAndUpdate(
+      { _id: order._id, user: req.user._id, status: "ready" },
+      {
+        $set: {
+          pickupQrHash: hashPickupToken(token),
+          pickupQrExpiresAt: expiresAt,
+        },
+      },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      return res.status(409).json({ message: "Order status changed; refresh and try again" });
+    }
+
+    res.status(201).json({ token, expiresAt });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/orders/verify-qr (assigned staff/admin)
+exports.verifyPickupQr = async (req, res, next) => {
+  try {
+    const { token } = req.body || {};
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      return res.status(400).json({ message: "Pickup QR is invalid or expired" });
+    }
+
+    const tokenHash = hashPickupToken(token);
+    const now = new Date();
+    const order = await Order.findOne({
+      pickupQrHash: tokenHash,
+      status: "ready",
+      pickupQrExpiresAt: { $gt: now },
+    }).select("+pickupQrHash +pickupQrExpiresAt");
+    if (!order) {
+      return res.status(400).json({ message: "Pickup QR is invalid or expired" });
+    }
+    if (!canManageCanteen(req.user, order.canteen)) {
+      return res.status(403).json({ message: "This order belongs to another canteen" });
+    }
+
+    const collected = await Order.findOneAndUpdate(
+      {
+        _id: order._id,
+        canteen: order.canteen,
+        status: "ready",
+        pickupQrHash: tokenHash,
+        pickupQrExpiresAt: { $gt: new Date() },
+      },
+      {
+        $set: {
+          status: "collected",
+          collectedAt: now,
+          collectedBy: req.user._id,
+        },
+        $unset: { pickupQrHash: 1, pickupQrExpiresAt: 1 },
+      },
+      { new: true, runValidators: true }
+    );
+    if (!collected) {
+      return res.status(409).json({ message: "Order is no longer ready for pickup" });
+    }
+
+    await writeAudit(req, {
+      eventType: "order.collected",
+      entityType: "order",
+      entityId: collected._id,
+      canteen: collected.canteen,
+      details: { fromStatus: "ready", toStatus: "collected", paymentStatus: collected.paymentStatus },
+    });
+    notifyOrder(collected);
+    res.json({
+      orderNumber: collected.orderNumber,
+      status: collected.status,
+      paymentStatus: collected.paymentStatus,
+    });
   } catch (err) {
     next(err);
   }
@@ -367,19 +482,36 @@ exports.updateStatus = async (req, res, next) => {
     }
 
     if (status === "no_show") {
-      const done = await markNoShow(order._id);
+      const done = await markNoShow(order._id, {}, req);
       if (!done) {
         return res.status(400).json({ message: "This order is no longer ready" });
       }
       return res.json(done);
     }
 
-    order.status = status;
-    if (status === "ready") order.readyAt = new Date();
-    await order.save();
-    notifyOrder(order);
+    const updated = await Order.findOneAndUpdate(
+      { _id: order._id, canteen: order.canteen, status: order.status },
+      {
+        $set: {
+          status,
+          ...(status === "ready" ? { readyAt: new Date() } : {}),
+        },
+      },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      return res.status(409).json({ message: "Order status changed; refresh and try again" });
+    }
+    await writeAudit(req, {
+      eventType: "order.status_changed",
+      entityType: "order",
+      entityId: updated._id,
+      canteen: updated.canteen,
+      details: { fromStatus: order.status, toStatus: updated.status },
+    });
+    notifyOrder(updated);
 
-    res.json(order);
+    res.json(publicOrder(updated));
   } catch (err) {
     next(err);
   }
@@ -400,10 +532,23 @@ exports.cancelOrder = async (req, res, next) => {
       return res.status(400).json({ message: "Only orders that are still 'placed' can be cancelled" });
     }
 
-    order.status = "cancelled";
-    await order.save();
-    notifyOrder(order);
-    res.json(order);
+    const cancelled = await Order.findOneAndUpdate(
+      { _id: order._id, user: req.user._id, status: "placed" },
+      { $set: { status: "cancelled" } },
+      { new: true, runValidators: true }
+    );
+    if (!cancelled) {
+      return res.status(409).json({ message: "Order status changed; refresh before cancelling" });
+    }
+    await writeAudit(req, {
+      eventType: "order.cancelled",
+      entityType: "order",
+      entityId: cancelled._id,
+      canteen: cancelled.canteen,
+      details: { fromStatus: "placed", toStatus: cancelled.status },
+    });
+    notifyOrder(cancelled);
+    res.json(publicOrder(cancelled));
   } catch (err) {
     next(err);
   }
@@ -412,11 +557,15 @@ exports.cancelOrder = async (req, res, next) => {
 // PATCH /api/orders/:id/verify  body: { code, paid? }  (staff of that canteen, or admin)
 exports.verifyAndCollect = async (req, res, next) => {
   try {
-    const { code, paid } = req.body;
+    const { code, paid } = req.body || {};
+    if (paid !== undefined && typeof paid !== "boolean") {
+      return res.status(400).json({ message: "paid must be true or false" });
+    }
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid order id" });
     }
-    const order = await Order.findById(req.params.id).select("+pickupCode +codeAttempts");
+    const order = await Order.findById(req.params.id)
+      .select("+pickupCode +codeAttempts +pickupQrHash");
     if (!order) return res.status(404).json({ message: "Order not found" });
     if (!canManageCanteen(req.user, order.canteen)) {
       return res.status(403).json({ message: "This order belongs to another canteen" });
@@ -425,7 +574,7 @@ exports.verifyAndCollect = async (req, res, next) => {
       return res.status(400).json({ message: "Only ready orders can be collected" });
     }
 
-    // orders placed before pickup codes existed have no code, so skip the check
+    // Orders created before pickup codes existed retain their legacy collection behavior.
     if (order.pickupCode) {
       const attempts = order.codeAttempts || 0;
       if (attempts >= MAX_CODE_ATTEMPTS) {
@@ -434,20 +583,81 @@ exports.verifyAndCollect = async (req, res, next) => {
         });
       }
       if (String(code || "").trim() !== order.pickupCode) {
-        order.codeAttempts = attempts + 1;
-        await order.save();
-        const left = MAX_CODE_ATTEMPTS - order.codeAttempts;
+        const attempted = await Order.findOneAndUpdate(
+          {
+            _id: order._id,
+            canteen: order.canteen,
+            status: "ready",
+            pickupCode: order.pickupCode,
+            codeAttempts: { $lt: MAX_CODE_ATTEMPTS },
+          },
+          { $inc: { codeAttempts: 1 } },
+          { new: true }
+        ).select("+codeAttempts");
+        if (!attempted) {
+          return res.status(409).json({ message: "Order changed; refresh before verifying pickup" });
+        }
+        const left = MAX_CODE_ATTEMPTS - attempted.codeAttempts;
         return res.status(400).json({
           message: left > 0 ? `Wrong code. ${left} attempts left.` : "Wrong code. No attempts left.",
         });
       }
     }
 
-    order.status = "collected";
-    if (paid === true) order.paymentStatus = "paid"; // only when staff say so
-    await order.save();
-    notifyOrder(order);
-    res.json(publicOrder(order));
+    const now = new Date();
+    const update = {
+      $set: {
+        status: "collected",
+        collectedAt: now,
+        collectedBy: req.user._id,
+      },
+      $unset: { pickupQrHash: 1, pickupQrExpiresAt: 1 },
+    };
+    if (paid === true) {
+      update.$set.paymentStatus = "paid";
+      update.$set.paidAt = now;
+      update.$set.paidBy = req.user._id;
+    }
+    const filter = {
+      _id: order._id,
+      canteen: order.canteen,
+      status: "ready",
+      ...(order.pickupCode
+        ? {
+            pickupCode: order.pickupCode,
+            codeAttempts: { $lt: MAX_CODE_ATTEMPTS },
+          }
+        : {}),
+    };
+    const collected = await Order.findOneAndUpdate(filter, update, {
+      new: true,
+      runValidators: true,
+    });
+    if (!collected) {
+      return res.status(409).json({ message: "Order is no longer ready for pickup" });
+    }
+    await writeAudit(req, {
+      eventType: "order.collected",
+      entityType: "order",
+      entityId: collected._id,
+      canteen: collected.canteen,
+      details: {
+        fromStatus: "ready",
+        toStatus: "collected",
+        paymentStatus: collected.paymentStatus,
+      },
+    });
+    if (paid === true) {
+      await writeAudit(req, {
+        eventType: "order.payment_confirmed",
+        entityType: "order",
+        entityId: collected._id,
+        canteen: collected.canteen,
+        details: { paymentStatus: collected.paymentStatus },
+      });
+    }
+    notifyOrder(collected);
+    res.json(publicOrder(collected));
   } catch (err) {
     next(err);
   }
@@ -468,10 +678,33 @@ exports.confirmPayment = async (req, res, next) => {
       return res.status(400).json({ message: "Payment can only be confirmed for ready, collected, or no-show orders" });
     }
 
-    order.paymentStatus = "paid";
-    await order.save();
-    notifyOrder(order);
-    res.json(order);
+    if (order.paymentStatus === "paid") return res.json(publicOrder(order));
+
+    const updated = await Order.findOneAndUpdate(
+      {
+        _id: order._id,
+        canteen: order.canteen,
+        status: { $in: ["ready", "collected", "no_show"] },
+        paymentStatus: { $ne: "paid" },
+      },
+      { $set: { paymentStatus: "paid", paidAt: new Date(), paidBy: req.user._id } },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      const current = await Order.findById(req.params.id);
+      if (current?.paymentStatus === "paid") return res.json(publicOrder(current));
+      return res.status(409).json({ message: "Order changed before payment was recorded" });
+    }
+
+    await writeAudit(req, {
+      eventType: "order.payment_confirmed",
+      entityType: "order",
+      entityId: updated._id,
+      canteen: updated.canteen,
+      details: { paymentStatus: updated.paymentStatus },
+    });
+    notifyOrder(updated);
+    res.json(publicOrder(updated));
   } catch (err) {
     next(err);
   }

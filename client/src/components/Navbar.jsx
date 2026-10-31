@@ -27,10 +27,13 @@ export default function Navbar() {
         {logoutError && <span className="error" role="alert">{logoutError}</span>}
         {isStaff && <Link to="/dashboard">Dashboard</Link>}
         {user.role === "admin" && <Link to="/admin">Admin</Link>}
+        {user.role === "admin" && <Link to="/admin/reviews">Review moderation</Link>}
+        {user.role === "admin" && <Link to="/admin/audit-logs">Audit log</Link>}
         {isStaff && <Link to="/manage-menu">Manage Menu</Link>}
         {isStaff && <Link to="/blocked">Blocked</Link>}
         {isStaff && <Link to="/report">Sales Report</Link>}
         <Link to="/orders">My Orders</Link>
+        {["student", "teacher"].includes(user.role) && <Link to="/discover">Discover</Link>}
         <Link to="/account">Account</Link>
         <Link to="/cart">Cart ({count})</Link>
         <span className="nav-user">{user.name}</span>

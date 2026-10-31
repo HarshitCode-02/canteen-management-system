@@ -6,6 +6,8 @@ const { SLOT_MS, slotStart, countInSlot } = require("../slots");
 const User = require("../models/User");
 const Order = require("../models/Order");
 const { emitToUser } = require("../socket");
+const { loadVisibleRatings } = require("../services/reviewRatings");
+const { writeAudit } = require("../services/auditLog");
 
 
 
@@ -79,16 +81,20 @@ exports.getCanteenMenu = async (req, res, next) => {
 
     // Popular = ordered 3+ times in the last 7 days, top 3 items
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const top = await Order.aggregate([
+    const [top, ratings] = await Promise.all([Order.aggregate([
       { $match: { canteen: canteen._id, createdAt: { $gte: since }, status: { $ne: "cancelled" } } },
       { $unwind: "$items" },
       { $group: { _id: "$items.menuItem", qty: { $sum: "$items.qty" } } },
       { $match: { qty: { $gte: 3 } } },
       { $sort: { qty: -1 } },
       { $limit: 3 },
-    ]);
+    ]), loadVisibleRatings(found.map((item) => item._id))]);
     const popular = new Set(top.map((t) => String(t._id)));
-    const items = found.map((i) => ({ ...i.toObject(), isPopular: popular.has(String(i._id)) }));
+    const items = found.map((i) => ({
+      ...i.toObject(),
+      isPopular: popular.has(String(i._id)),
+      rating: ratings.get(String(i._id)) || { average: null, count: 0 },
+    }));
 
     const n = (await loadFor([canteen._id]))[String(canteen._id)] || 0;
     res.json({
@@ -112,6 +118,13 @@ exports.createCanteen = async (req, res, next) => {
     if (!data.slug) return res.status(400).json({ message: "Could not create a valid slug" });
 
     const canteen = await Canteen.create(data);
+    await writeAudit(req, {
+      eventType: "canteen.created",
+      entityType: "canteen",
+      entityId: canteen._id,
+      canteen: canteen._id,
+      details: { isOpen: canteen.isOpen, isActive: canteen.isActive },
+    });
     res.status(201).json(canteen);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: "A canteen with this slug already exists" });
@@ -134,6 +147,13 @@ exports.updateCanteen = async (req, res, next) => {
       runValidators: true,
     });
     if (!canteen) return res.status(404).json({ message: "Canteen not found" });
+    await writeAudit(req, {
+      eventType: "canteen.updated",
+      entityType: "canteen",
+      entityId: canteen._id,
+      canteen: canteen._id,
+      details: { isOpen: canteen.isOpen, isActive: canteen.isActive },
+    });
     res.json(canteen);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: "A canteen with this slug already exists" });
@@ -157,6 +177,13 @@ exports.setOpen = async (req, res, next) => {
     }
     const canteen = await Canteen.findByIdAndUpdate(id, { isOpen: req.body.isOpen }, { new: true });
     if (!canteen) return res.status(404).json({ message: "Canteen not found" });
+    await writeAudit(req, {
+      eventType: "canteen.open_changed",
+      entityType: "canteen",
+      entityId: canteen._id,
+      canteen: canteen._id,
+      details: { isOpen: canteen.isOpen },
+    });
     res.json(canteen);
   } catch (err) {
     next(err);
@@ -261,6 +288,12 @@ exports.unblockUser = async (req, res, next) => {
     ).select("name");
     if (!user) return res.status(404).json({ message: "This student is not blocked" });
 
+    await writeAudit(req, {
+      eventType: "user.unblocked",
+      entityType: "user",
+      entityId: user._id,
+      canteen: id,
+    });
     emitToUser(userId, "accountUpdated", {}); // student's page refreshes at once
 
     res.json({ message: `${user.name} has been unblocked` });

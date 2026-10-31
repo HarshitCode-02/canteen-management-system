@@ -3,6 +3,9 @@ const test = require("node:test");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { resetUserPassword } = require("../controllers/adminController");
+const mockAuditLog = require("../testUtils/auditMock");
+
+mockAuditLog(test);
 
 const response = () => ({
   statusCode: 200,
