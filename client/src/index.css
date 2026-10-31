@@ -84,8 +84,19 @@ a {
   gap: 12px;
 }
 .nav-cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   white-space: nowrap;
   font-weight: 600;
+}
+.nav-user {
+  max-width: min(30vw, 180px);
+  overflow: hidden;
+  color: #444;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
 }
 .nav-menu {
   position: relative;
@@ -129,6 +140,7 @@ a {
 .nav-logout {
   display: block;
   width: 100%;
+  min-height: 44px;
   padding: 10px 12px;
   border-radius: 5px;
   text-align: left;
@@ -141,6 +153,41 @@ a {
 }
 .review-author {
   margin: 0 0 6px;
+}
+.order-notification {
+  position: fixed;
+  top: 72px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(380px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid #a5d6a7;
+  border-radius: 8px;
+  background: #e8f5e9;
+  color: #1b5e20;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+.order-notification-error {
+  border-color: #ef9a9a;
+  background: #ffebee;
+  color: #b00020;
+}
+.order-notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.order-notification-actions a {
+  font-weight: 600;
+}
+.order-notification button {
+  min-height: 40px;
+  background: transparent;
+  color: inherit;
 }
 
 .container {
@@ -889,11 +936,43 @@ select:focus-visible {
   .navbar {
     padding: 10px 12px;
   }
+  .nav-user {
+    max-width: calc(100vw - 230px);
+    font-size: 13px;
+  }
   .container {
     padding: 12px;
   }
   .dash-actions button,
-  .order-card button {
+  .order-card button,
+  .menu-item button {
+    min-height: 44px;
+  }
+}
+@media (max-width: 600px) {
+  .cart-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+  .cart-row > div:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .cart-row .stepper {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .cart-row > b {
+    grid-column: 1;
+  }
+  .cart-row > button {
+    grid-column: 2;
+    justify-self: end;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .cart-row .stepper button {
+    min-width: 44px;
     min-height: 44px;
   }
 }

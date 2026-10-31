@@ -11,6 +11,7 @@ export default function Navbar() {
   const [logoutError, setLogoutError] = useState("");
   const menuRef = useRef(null);
   const isStaff = user.role === "canteen" || user.role === "admin";
+  const displayName = user.name?.trim() || user.email?.split("@")[0] || "Account";
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -47,7 +48,22 @@ export default function Navbar() {
     <nav className="navbar">
       <Link to="/" className="brand">Canteen</Link>
       <div className="nav-actions">
-        <Link to="/cart" className="nav-cart">Cart ({count})</Link>
+        <Link to="/cart" className="nav-cart" aria-label={`Cart, ${count} items`}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 1.9-1.4L22 8H6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="10" cy="21" r="1" />
+            <circle cx="18" cy="21" r="1" />
+          </svg>
+          <span>{count}</span>
+        </Link>
+        <Link
+          to="/account"
+          className="nav-user"
+          aria-label={`Account profile: ${displayName}`}
+          title={displayName}
+        >
+          {displayName}
+        </Link>
         <div className="nav-menu" ref={menuRef}>
           <button
             type="button"

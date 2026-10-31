@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 const { canManageCanteen } = require('./middleware/auth');
 const { readAuthCookie } = require('./middleware/authCookie');
-const { getAllowedOrigins } = require("./allowedOrigins");
+const { getAllowedOrigins, isAllowedSocketOrigin } = require("./allowedOrigins");
 
 let io = null;
 
@@ -19,6 +19,9 @@ function initSocket(server) {
   // Verify the JWT on every connection
   io.use(async (socket, next) => {
     try {
+      if (!isAllowedSocketOrigin(socket.handshake.headers.origin, socket.request)) {
+        return next(new Error('Origin not allowed'));
+      }
       const token = readAuthCookie({ headers: socket.handshake.headers });
       if (!token) return next(new Error('No token'));
       const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });

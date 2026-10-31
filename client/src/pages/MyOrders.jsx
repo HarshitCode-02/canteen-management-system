@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useCart } from "../context/CartContext";
 import api, { errorMessage } from "../api";
@@ -232,6 +232,7 @@ function OrderCard({ order, onCancel, reviewedItems, onReviewed }) {
 }
 
 export default function MyOrders() {
+  const location = useLocation();
   const [orders, setOrders] = useState([]);
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState("");
@@ -280,39 +281,27 @@ export default function MyOrders() {
     setReviewedItems((current) => ({ ...current, [`${orderId}:${menuItemId}`]: review }));
   };
 
-  // load now, then slow polling every 30 seconds (fallback if the socket drops)
+  // Load initially; the layout keeps this order list current across the app.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- start the initial API load when this page mounts
     load();
-    const timer = setInterval(load, 30000);
-    return () => clearInterval(timer);
   }, [load]);
 
   useEffect(() => {
-    const socket = connectSocket();
-    if (!socket) return;
-    const onUpdated = (p) => {
-      load();
-      if (
-        p.status === "ready" &&
-        "Notification" in window &&
-        Notification.permission === "granted"
-      ) {
-        new Notification(`Order ${p.orderNumber} is ready!`, {
-          body: "Collect it at the counter.",
-        });
-      }
+    const onOrdersUpdated = (event) => {
+      setOrders(event.detail);
+      setLoading(false);
     };
-    socket.on("orderUpdated", onUpdated);
-    return () => socket.off("orderUpdated", onUpdated);
-  }, [load]);
+    window.addEventListener("campusbites:orders-updated", onOrdersUpdated);
+    return () => window.removeEventListener("campusbites:orders-updated", onOrdersUpdated);
+  }, []);
 
   // is this student blocked? refresh on load, every 30s, and on socket events
   const refreshBlocked = useCallback(() => {
     api
       .get("/auth/me")
       .then((res) => setBlocked(!!res.data.user?.isBlocked))
-      .catch(() => {});
+      .catch((err) => setError(errorMessage(err)));
   }, []);
 
   useEffect(() => {
@@ -358,6 +347,13 @@ export default function MyOrders() {
 
   return (
     <div>
+      {location.state?.orderConfirmation && (
+        <div className="ready-banner" role="status">
+          <b>Order #{location.state.orderConfirmation.orderNumber} is confirmed.</b>
+          <p>Pickup: {fmtTime(location.state.orderConfirmation.pickupTime)} · Total: ₹{location.state.orderConfirmation.total}</p>
+          <p>Track the order below and collect it when its status changes to Ready.</p>
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       {collectedOrderIds && reviewError && <p className="error" role="alert">{reviewError}</p>}
 
@@ -373,9 +369,12 @@ export default function MyOrders() {
       )}
 
       {"Notification" in window && Notification.permission === "default" && (
-        <button onClick={() => Notification.requestPermission()}>
-          Enable notifications
-        </button>
+        <div>
+          <p className="muted">Optional browser alerts can announce when an order is ready while the app is open. In-site updates work without permission.</p>
+          <button type="button" onClick={() => Notification.requestPermission()}>
+            Enable browser alerts
+          </button>
+        </div>
       )}
 
       <h2>Current order</h2>

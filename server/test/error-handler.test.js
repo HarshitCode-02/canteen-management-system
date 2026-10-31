@@ -29,7 +29,7 @@ test("production 500 responses hide internal messages and logs omit error detail
   const res = response();
   errorHandler(
     new Error("sensitive database detail"),
-    { method: "GET", path: "/api/orders" },
+    { method: "GET", path: "/api/orders", requestId: "request-123" },
     res,
     (err) => { throw err; }
   );
@@ -38,7 +38,7 @@ test("production 500 responses hide internal messages and logs omit error detail
   assert.deepEqual(res.body, { message: "Server error" });
   assert.deepEqual(logArgs, [
     "Request failed",
-    { method: "GET", path: "/api/orders", status: 500, errorName: "Error" },
+    { requestId: "request-123", method: "GET", path: "/api/orders", status: 500, errorName: "Error" },
   ]);
 });
 

@@ -18,4 +18,19 @@ const isAllowedOrigin = (origin, req) => {
   return Boolean(host && origin === `${req.protocol}://${host}`);
 };
 
-module.exports = { getAllowedOrigins, isAllowedOrigin };
+const isAllowedSocketOrigin = (origin, request) => {
+  if (!origin || !request?.headers) return false;
+  const forwardedProtocol = request.headers["x-forwarded-proto"]
+    ?.split(",")[0]
+    .trim()
+    .toLowerCase();
+  const protocol = ["http", "https"].includes(forwardedProtocol)
+    ? forwardedProtocol
+    : request.socket?.encrypted ? "https" : "http";
+  return isAllowedOrigin(origin, {
+    protocol,
+    get: (name) => request.headers[name],
+  });
+};
+
+module.exports = { getAllowedOrigins, isAllowedOrigin, isAllowedSocketOrigin };

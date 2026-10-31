@@ -52,7 +52,14 @@ async function connectToDatabase() {
 }
 
 app.use((req, res, next) => {
-  connectToDatabase().then(() => next(), next);
+  const startedAt = process.hrtime.bigint();
+  connectToDatabase().then(() => {
+    req.dbWaitMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    next();
+  }, (err) => {
+    req.dbWaitMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    next(err);
+  });
 });
 
 // Health check

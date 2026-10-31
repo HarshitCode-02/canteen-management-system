@@ -41,6 +41,8 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 
 **Handover guides:** [Full website tutorial for visitors, students, teachers, canteen owners/staff, and administrators](./docs/WEBSITE_TUTORIAL.md) · [Phase 2 final report](./docs/PHASE_2_FINAL_REPORT.md) · [Staff quick guide](./docs/STAFF-QUICK-GUIDE.md)
 
+**Current engineering reports:** [Complete system audit](./docs/COMPLETE_SYSTEM_AUDIT.md) · [Security audit](./docs/SECURITY_AUDIT_REPORT.md) · [Performance audit](./docs/PERFORMANCE_AUDIT.md) · [Mobile UX audit](./docs/MOBILE_UX_AUDIT.md) · [API integration guide](./docs/API_INTEGRATION_GUIDE.md) · [Feature recommendations](./docs/FEATURE_RECOMMENDATIONS.md) · [Fixes implemented](./docs/FIXES_IMPLEMENTED.md) · [Test results](./docs/TEST_RESULTS.md) · [College pilot plan](./docs/CAMPUSBITES-PILOT.md)
+
 ---
 
 ## 1. Introduction
@@ -65,11 +67,11 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Let students order food before arriving | Implemented |
 | Support multiple canteens, each with its own menu and orders | Implemented |
 | Let staff manage orders (prepare, ready, collect, cancel, no-show) | Implemented |
-| Let customers see order status | Implemented (30s polling on Vercel; Socket.IO is available on long-running hosts) |
+| Let customers see order status | Implemented (global in-app refresh every 30s; Socket.IO is available on long-running hosts; no push delivery when the site is closed) |
 | Pickup verification with a 4-digit code | Implemented |
 | Cash/UPI payment confirmed manually at the counter | Implemented |
 | Open/closed switch, pickup-slot limits, no-show auto-blocking after one missed pickup | Implemented in code |
-| Order history, reorder, search, sales reports, admin controls, editable account profile/password | Implemented in code |
+| Order history (latest 50), reorder, menu search, sales reports, admin controls, editable account profile/password | Implemented in code; order-history filters/pagination are not implemented |
 | One-time QR pickup, verified item reviews, budget suggestions, canteen comparison, deterministic assistant, admin audit log | Implemented in code; live workflows still need verification |
 | PWA offline shell | Static assets and offline page are configured; real-device install/offline behavior is not verified |
 | Docker development and GitHub Actions CI | Configured; local Docker startup not yet verified |

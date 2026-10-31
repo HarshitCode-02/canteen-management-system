@@ -26,6 +26,12 @@ const makePickupCode = () => String(crypto.randomInt(0, 10000)).padStart(4, "0")
 const MAX_CODE_ATTEMPTS = 5;
 const PICKUP_QR_TTL_MS = 30 * 60 * 1000;
 const hashPickupToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
+const orderResponse = (order) => {
+  const result = typeof order.toObject === "function" ? order.toObject() : { ...order };
+  delete result.idempotencyKey;
+  delete result.requestFingerprint;
+  return result;
+};
 
 // allowed status changes through updateStatus ("collected" goes through the code check)
 const ALLOWED = {
@@ -62,6 +68,11 @@ class OrderRequestError extends Error {
 
 // POST /api/orders
 exports.createOrder = async (req, res, next) => {
+  const startedAt = performance.now();
+  const timing = {};
+  let idempotencyKey;
+  let requestFingerprint;
+  let transactionStartedAt;
   try {
     const { items, pickupTime, note } = req.body || {};
 
@@ -92,6 +103,13 @@ exports.createOrder = async (req, res, next) => {
     if (pickup.getTime() < Date.now() - 5 * 60 * 1000) {
       return res.status(400).json({ message: "pickupTime cannot be in the past" });
     }
+    idempotencyKey = req.get?.("Idempotency-Key") || req.headers?.["idempotency-key"];
+    if (
+      idempotencyKey !== undefined &&
+      (typeof idempotencyKey !== "string" || !/^[A-Za-z0-9_-]{20,128}$/.test(idempotencyKey))
+    ) {
+      return res.status(400).json({ message: "Idempotency-Key must be a valid unique request key" });
+    }
 
     // merge duplicate items and validate qty
     const wanted = new Map();
@@ -110,11 +128,40 @@ exports.createOrder = async (req, res, next) => {
       }
       wanted.set(key, mergedQty);
     }
+    if (idempotencyKey) {
+      requestFingerprint = crypto.createHash("sha256").update(JSON.stringify({
+        items: [...wanted.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([menuItemId, qty]) => ({ menuItemId, qty })),
+        pickupTime: pickup.toISOString(),
+        note: cleanNote,
+      })).digest("hex");
+    }
 
     let order;
+    let isReplay = false;
+    transactionStartedAt = performance.now();
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
+        let stageStartedAt = performance.now();
+        if (idempotencyKey) {
+          const previous = await Order.findOne({
+            user: req.user._id,
+            idempotencyKey,
+          }).select("+requestFingerprint").session(session);
+          if (previous) {
+            if (previous.requestFingerprint !== requestFingerprint) {
+              throw new OrderRequestError(409, "This checkout key was already used for a different order");
+            }
+            order = previous;
+            isReplay = true;
+            return;
+          }
+        }
+        timing.idempotencyLookupMs = performance.now() - stageStartedAt;
+
+        stageStartedAt = performance.now();
         // These transactional writes serialize competing orders for this user and canteen.
         const user = await User.findOneAndUpdate(
           { _id: req.user._id, isBlocked: { $ne: true } },
@@ -135,7 +182,9 @@ exports.createOrder = async (req, res, next) => {
         if (active) {
           throw new OrderRequestError(409, `You already have an active order (${active.orderNumber})`);
         }
+        timing.userAndActiveOrderMs = performance.now() - stageStartedAt;
 
+        stageStartedAt = performance.now();
         const menuItems = await MenuItem.find({ _id: { $in: [...wanted.keys()] } }).session(session);
         if (menuItems.length !== wanted.size) {
           throw new OrderRequestError(400, "One or more menu items were not found");
@@ -148,8 +197,10 @@ exports.createOrder = async (req, res, next) => {
         if (!menuItems[0].canteen || canteenIds.size !== 1) {
           throw new OrderRequestError(400, "All items must be from the same canteen");
         }
+        timing.menuValidationMs = performance.now() - stageStartedAt;
         const canteenId = menuItems[0].canteen;
 
+        stageStartedAt = performance.now();
         const canteen = await Canteen.findOneAndUpdate(
           { _id: canteenId, isActive: true, isOpen: true },
           { $inc: { orderLockVersion: 1 } },
@@ -165,7 +216,9 @@ exports.createOrder = async (req, res, next) => {
         if (used >= canteen.slotLimit) {
           throw new OrderRequestError(409, "That pickup slot is full. Please choose another time.");
         }
+        timing.canteenAndSlotMs = performance.now() - stageStartedAt;
 
+        stageStartedAt = performance.now();
         const orderItems = menuItems.map((item) => ({
           menuItem: item._id,
           name: item.name,
@@ -182,6 +235,7 @@ exports.createOrder = async (req, res, next) => {
           pickupTime: pickup,
           note: cleanNote,
           pickupCode: makePickupCode(),
+          ...(idempotencyKey ? { idempotencyKey, requestFingerprint } : {}),
         });
         await order.save({ session });
         await writeAudit(req, {
@@ -191,14 +245,51 @@ exports.createOrder = async (req, res, next) => {
           canteen: order.canteen,
           details: { toStatus: order.status },
         }, session);
+        timing.saveAndAuditMs = performance.now() - stageStartedAt;
       });
+      timing.transactionMs = performance.now() - transactionStartedAt;
     } finally {
       await session.endSession();
     }
 
-    notifyOrder(order, "newOrder");
-    res.status(201).json(order);
+    if (!isReplay) notifyOrder(order, "newOrder");
+    console.info(JSON.stringify({
+      event: "order.create.completed",
+      requestId: req.requestId,
+      idempotentReplay: isReplay,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      ...Object.fromEntries(Object.entries(timing).map(([name, value]) => [name, Math.round(value)])),
+    }));
+    res.status(201).json(orderResponse(order));
   } catch (err) {
+    if (err.code === 11000 && idempotencyKey && requestFingerprint) {
+      try {
+        const existing = await Order.findOne({ user: req.user._id, idempotencyKey })
+          .select("+requestFingerprint");
+        if (existing?.requestFingerprint === requestFingerprint) {
+          console.info(JSON.stringify({
+            event: "order.create.completed",
+            requestId: req.requestId,
+            idempotentReplay: true,
+            elapsedMs: Math.round(performance.now() - startedAt),
+          }));
+          return res.status(201).json(orderResponse(existing));
+        }
+      } catch (lookupError) {
+        return next(lookupError);
+      }
+    }
+    console.info(JSON.stringify({
+      event: "order.create.failed",
+      requestId: req.requestId,
+      statusCode: err instanceof OrderRequestError ? err.status : err.name === "ValidationError" ? 400 : 500,
+      errorName: err.name || "Error",
+      elapsedMs: Math.round(performance.now() - startedAt),
+      ...(transactionStartedAt
+        ? { transactionMs: Math.round(performance.now() - transactionStartedAt) }
+        : {}),
+      ...Object.fromEntries(Object.entries(timing).map(([name, value]) => [name, Math.round(value)])),
+    }));
     if (err instanceof OrderRequestError) {
       return res.status(err.status).json({ message: err.message });
     }

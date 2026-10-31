@@ -3,8 +3,38 @@ import { Link, useNavigate } from "react-router-dom";
 import api, { errorMessage } from "../api";
 import { useCart } from "../context/CartContext";
 
+const PENDING_ORDER_KEY = "campusbites.pending-order";
+
 const fmtSlot = (iso) =>
   new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+async function getRequestFingerprint(payload) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function getIdempotencyKey(payload) {
+  let fingerprint;
+  try {
+    fingerprint = await getRequestFingerprint(payload);
+  } catch {
+    throw new Error("Secure checkout retry protection is unavailable in this browser. Please use an updated browser.");
+  }
+
+  let pending;
+  try {
+    pending = JSON.parse(localStorage.getItem(PENDING_ORDER_KEY) || "null");
+    if (pending?.fingerprint === fingerprint && /^[A-Za-z0-9_-]{20,128}$/.test(pending.key)) {
+      return pending.key;
+    }
+    const key = crypto.randomUUID();
+    localStorage.setItem(PENDING_ORDER_KEY, JSON.stringify({ fingerprint, key }));
+    return key;
+  } catch {
+    throw new Error("Your browser could not save checkout retry protection. Enable site storage and try again.");
+  }
+}
 
 export default function Cart() {
   const { items, canteen, addItem, decrease, remove, clearCart, total } = useCart();
@@ -13,56 +43,93 @@ export default function Cart() {
   const [slot, setSlot] = useState(""); // ISO start time of the chosen slot
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [slotError, setSlotError] = useState("");
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [availabilityChecked, setAvailabilityChecked] = useState(false);
   const [note, setNote] = useState("");
   const canteenId = canteen?._id;
 
   // check whether the canteen is still open
   useEffect(() => {
     if (!canteenId) return;
+    let active = true;
     api
       .get(`/canteens/${canteenId}`)
-      .then((res) => setIsOpen(res.data.isOpen))
-      .catch(() => { });
+      .then((res) => {
+        if (!active) return;
+        setIsOpen(res.data.isOpen);
+        setAvailabilityError("");
+      })
+      .catch((err) => {
+        if (active) setAvailabilityError(errorMessage(err));
+      })
+      .finally(() => {
+        if (active) setAvailabilityChecked(true);
+      });
+    return () => { active = false; };
   }, [canteenId]);
 
   // load the pickup slots; keep the chosen slot if it is still free, else pick the first free one
   const loadSlots = useCallback(() => {
     if (!canteenId) return;
+    setSlotsLoading(true);
     api
       .get(`/canteens/${canteenId}/slots`)
       .then((res) => {
         setSlots(res.data);
+        setSlotError("");
         setSlot((cur) => {
           if (res.data.find((s) => s.start === cur && !s.full)) return cur;
           const firstFree = res.data.find((s) => !s.full);
           return firstFree ? firstFree.start : "";
         });
       })
-      .catch(() => { });
+      .catch((err) => setSlotError(errorMessage(err)))
+      .finally(() => setSlotsLoading(false));
   }, [canteenId]);
 
   // refresh every minute so past slots drop off
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch the selected canteen's available pickup slots
     loadSlots();
     const timer = setInterval(loadSlots, 60000);
     return () => clearInterval(timer);
   }, [loadSlots]);
 
   const placeOrder = async () => {
-    if (!isOpen || !slot) return;
+    if (busy || !isOpen || !availabilityChecked || !slot) return;
     setError("");
     setBusy(true);
+    const payload = {
+      items: items.map((i) => ({ menuItemId: i.menuItemId, qty: i.qty })),
+      pickupTime: slot,
+      note,
+    };
     try {
-      await api.post("/orders", {
-        items: items.map((i) => ({ menuItemId: i.menuItemId, qty: i.qty })),
-        pickupTime: slot,
-        note,
+      const idempotencyKey = await getIdempotencyKey(payload);
+      const result = await api.post("/orders", payload, {
+        headers: { "Idempotency-Key": idempotencyKey },
       });
+      if (!result.data?._id || typeof result.data.orderNumber !== "string") {
+        throw new Error("The server response did not confirm an order. Your cart has been kept.");
+      }
+      localStorage.removeItem(PENDING_ORDER_KEY);
       clearCart();
-      navigate("/orders");
+      navigate("/orders", {
+        state: {
+          orderConfirmation: {
+            orderNumber: result.data.orderNumber,
+            pickupTime: result.data.pickupTime || slot,
+            total: result.data.total,
+          },
+        },
+      });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err.response
+        ? errorMessage(err)
+        : err.message || "We couldn't confirm the order. Your cart is saved; check My Orders or retry safely.");
       loadSlots(); // a slot may have just filled up
     } finally {
       setBusy(false);
@@ -112,6 +179,7 @@ export default function Cart() {
       <label className="field">
         Pickup time
         <select value={slot} onChange={(e) => setSlot(e.target.value)}>
+          {!slot && <option value="" disabled>{slotsLoading ? "Loading pickup times..." : "Select pickup time"}</option>}
           {slots.map((s) => (
             <option key={s.start} value={s.start} disabled={s.full}>
               {fmtSlot(s.start)} {s.full ? "- Full" : `(${s.used}/${s.limit})`}
@@ -123,8 +191,10 @@ export default function Cart() {
       {slots.length > 0 && slots.every((s) => s.full) && (
         <p className="error">All upcoming slots are full. Try again in a few minutes.</p>
       )}
-      {!isOpen && <p className="error">This canteen is closed right now. You can't place an order.</p>}
-      {error && <p className="error">{error}</p>}
+      {slotError && <p className="error" role="alert">{slotError}</p>}
+      {availabilityError && <p className="error" role="alert">{availabilityError}</p>}
+      {availabilityChecked && !availabilityError && !isOpen && <p className="error">This canteen is closed right now. You can't place an order.</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       <p className="muted">You pay at the counter when you collect.</p>
       <label className="field">
         Note for the canteen (optional)
@@ -136,9 +206,10 @@ export default function Cart() {
         />
         <small className="muted">{note.length}/100</small>
       </label>
-      <button onClick={placeOrder} disabled={busy || !isOpen || !slot}>
+      <button onClick={placeOrder} disabled={busy || !availabilityChecked || !isOpen || !slot || slotsLoading}>
         {busy ? "Placing order..." : "Place order"}
       </button>
+      {busy && <p className="muted" role="status">Saving your order securely. Please keep this page open.</p>}
     </div>
   );
 }

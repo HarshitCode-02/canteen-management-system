@@ -2,6 +2,7 @@ module.exports = (err, req, res, next) => {
   if (res.headersSent) return next(err);
   const status = Number.isInteger(err.status) ? err.status : 500;
   console.error("Request failed", {
+    requestId: req.requestId,
     method: req.method,
     path: req.path,
     status,

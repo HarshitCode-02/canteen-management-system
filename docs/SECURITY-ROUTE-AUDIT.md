@@ -24,7 +24,7 @@ Reviewed against the route middleware and controller checks in the repository. R
 | `/api/smart/*` | Student/teacher | `router.use(protect, authorize("student", "teacher"))`; assistant order lookup is scoped to the JWT user; recommendation inputs/search are bounded |
 | `/api/admin/*` | Admin | `router.use(protect, authorize("admin"))` covers every admin route, including review moderation and filtered/paginated audit reads |
 | Audit event writes | Server-side mutation controllers | Actor comes from `req.user`; event details use a fixed allowlist and exclude credentials, pickup codes, QR tokens, and review text |
-| Socket.IO user/canteen rooms | Authenticated socket | Cookie JWT verified; canteen room join validates ObjectId and `canManageCanteen`; payload excludes pickup codes and QR tokens |
+| Socket.IO user/canteen rooms | Authenticated socket | Handshake Origin must be configured or exact same-origin; cookie JWT verified; canteen room join validates ObjectId and `canManageCanteen`; payload excludes pickup codes and QR tokens |
 
 ## Still required
 
@@ -33,4 +33,5 @@ Reviewed against the route middleware and controller checks in the repository. R
 - Order capacity and no-show/block changes now use MongoDB transactions. Concurrent behavior still needs database-backed verification against Atlas or a local replica set.
 - Backend unit/controller tests cover role checks, pickup transitions, review eligibility, smart-tool scoping, and audit metadata. Real HTTP/database-backed cross-canteen and transaction tests remain needed.
 - Test production CORS, HTTPS, client/API cookie behavior, Atlas access restrictions, external no-show scheduler, and private secret configuration in Vercel.
+- The Socket.IO Origin guard has focused unit coverage, but still needs a deployed cross-origin browser test.
 - This code review is not a substitute for penetration testing or a production security certification.

@@ -26,6 +26,8 @@ const orderSchema = new mongoose.Schema({
   codeAttempts: { type: Number, default: 0, select: false },
   pickupQrHash: { type: String, select: false },
   pickupQrExpiresAt: { type: Date, select: false },
+  idempotencyKey: { type: String, select: false },
+  requestFingerprint: { type: String, select: false },
   collectedAt: { type: Date },
   collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   paidAt: { type: Date },
@@ -39,5 +41,9 @@ const orderSchema = new mongoose.Schema({
 orderSchema.index({ user: 1, status: 1 });
 orderSchema.index({ canteen: 1, status: 1 });
 orderSchema.index({ pickupQrHash: 1 }, { sparse: true, unique: true });
+orderSchema.index(
+  { user: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
+);
 
 module.exports = mongoose.model("Order", orderSchema);

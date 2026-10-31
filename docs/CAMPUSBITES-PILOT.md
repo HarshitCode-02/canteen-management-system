@@ -29,3 +29,16 @@ Use a paper form or an approved college feedback channel. Do not collect passwor
 - Would you use pre-order pickup again? What should change first?
 
 Record issues in the bug template in [the phone test plan](./PHONE-TEST-PLAN.md). Review feedback with staff before expanding to more canteens.
+
+## Pilot success measures
+
+Review an initial two-week pilot, then decide whether to extend it. Use aggregate daily totals and avoid public student identities:
+
+- Registered participants and distinct users who place an order.
+- Orders placed, collected, cancelled, and no-show; define completion as collected orders divided by placed orders, excluding cancellations only when explicitly stated.
+- Repeat-order rate among participants with at least one prior completed order.
+- Checkout median and p95 response time, correlated using request IDs. Separate database wait, transaction time, and platform/cold-start delay.
+- Ready-status notification refresh/delivery observations and common checkout error categories.
+- Popular items and canteen workload, reviewed with staff and without exporting personal account details.
+
+Compare app metrics with staff observations and counter reconciliation. Do not treat registered accounts alone as adoption, or paid revenue as all orders; sales revenue should count only orders with `paymentStatus: paid`.
