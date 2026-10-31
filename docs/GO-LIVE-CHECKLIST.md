@@ -2,8 +2,8 @@
 
 The owner reports the product is deployed on Vercel. Use this checklist to verify the live configuration and handover; do not treat deployment itself as independently confirmed by this document.
 
-- [ ] Confirm which Vercel project serves the client and which serves the API (or verify the same-origin rewrite); do not change project roots or rewrites during handover.
-- [ ] Verify `VITE_API_URL` points to the server's `/api` path when separate projects are used, and `CLIENT_URL` allows the deployed client origin. Never put values in Git or chat.
+- [ ] Confirm the active Vercel project root. For the client project setup, verify `client/vercel.json` forwards `/api/*` to the live backend; do not change the root or rewrite during handover.
+- [ ] Leave `VITE_API_URL` unset when using the same-origin proxy; if direct cross-origin API access is intentional, verify cookie/CORS behavior. Confirm `CLIENT_URL` allows the deployed client origin. Never put values in Git or chat.
 - [ ] Confirm the Vercel server has private `MONGO_URI`, `JWT_SECRET`, and `CRON_SECRET` settings; do not print or share their values.
 - [ ] Restrict Atlas access, use a least-privilege database user, and confirm backup/restore access.
 - [ ] Check `/api/health` and test cookie login/refresh with separate student, staff, and admin accounts.

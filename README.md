@@ -63,13 +63,14 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Let students order food before arriving | Implemented |
 | Support multiple canteens, each with its own menu and orders | Implemented |
 | Let staff manage orders (prepare, ready, collect, cancel, no-show) | Implemented |
-| Let customers see order status | Implemented (live via Socket.IO, with 30s polling fallback) |
+| Let customers see order status | Implemented (30s polling on Vercel; Socket.IO is available on long-running hosts) |
 | Pickup verification with a 4-digit code | Implemented |
 | Cash/UPI payment confirmed manually at the counter | Implemented |
 | Open/closed switch, pickup-slot limits, no-show auto-blocking after one missed pickup | Implemented in code |
 | Order history, reorder, search, sales reports, admin controls, editable account profile/password, PWA manifest | Implemented in code |
 | Docker development and GitHub Actions CI | Configured; local Docker startup not yet verified |
-| Real-device testing, CampusBites pilot, production deployment | Not done |
+| Real-device testing and CampusBites pilot | Not done |
+| Production deployment | Owner reports deployed on Vercel; live settings and production checks remain unverified here |
 
 ---
 
@@ -641,7 +642,7 @@ The safe templates are `server/.env.example` and `client/.env.example`. Copy the
 | `CLIENT_URL` | Server allowlist for the deployed client origin(s); comma-separated when needed |
 | `PORT` | Server listen port; defaults to 5001 |
 | `NODE_ENV` | Cookie security mode; use `development` locally, otherwise cookies default to Secure/SameSite=None |
-| `VITE_API_URL` | Optional client API base URL; set it to the deployed server's `/api` URL when the client and API use separate Vercel projects; leave unset when `/api` is routed on the same origin |
+| `VITE_API_URL` | Optional client API base override; leave unset to use the deployed `/api` rewrite or same-origin route. For local Vite, the example points to the local backend. Direct cross-origin API calls require verified cookie/CORS settings. |
 | `CRON_SECRET` | Secret required by `GET /api/internal/no-show`; a trusted external scheduler must send it in the Authorization header |
 | `VERCEL_URL` | Supplied by Vercel; used for server-side origin checks |
 
@@ -717,7 +718,7 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 
 ## 21. Deployment
 
-**Deployment status:** the owner reports the app is deployed and working on Vercel. The repo contains a root multi-service config, a client SPA fallback, and client code that supports either same-origin `/api` or a separately configured `VITE_API_URL`. Do not change Vercel project roots, rewrites, or environment settings without checking the live Vercel project configuration first.
+**Deployment status:** the owner reports the app is deployed and working on Vercel. The repo contains a root multi-service config and a separate `client/vercel.json`; the latter forwards `/api/*` to the backend deployment and serves the client fallback. With that client-project setup, the browser uses the frontend origin and the rewrite proxies API calls, which is preferable for the HttpOnly auth cookie. Keep the rewrite destination synchronized with the backend deployment. `VITE_API_URL` overrides that path and should be used only when intentionally calling the API directly; cross-origin cookies then need explicit verification. The live Vercel project root/topology is not confirmed here, so inspect the Vercel dashboard before changing project roots, rewrites, or environment settings.
 
 Vercel builds disable the persistent Socket.IO client; Dashboard and My Orders use the existing 30-second polling fallback. A Vercel function does not keep the local `node-cron` process alive. The backend exposes `GET /api/internal/no-show` protected by `CRON_SECRET`, but this repo cannot prove a trusted external scheduler is configured and calling it every minute. Verify that scheduler and cookie-based login at handover. Vercel deployment is automatic through its Git integration; GitHub Actions validates code and builds but does not deploy or publish images.
 

@@ -39,7 +39,7 @@ The owner reports the current multi-canteen app is deployed on Vercel and workin
 
 ## Deployment and configuration
 
-The owner reports the app is deployed on Vercel. Source supports `VITE_API_URL` for the frontend API base (include `/api`) or same-origin `/api` routing. The backend uses `CLIENT_URL` for browser-origin checks. These are configuration names only; set values privately in Vercel and never paste them into chat or docs.
+The owner reports the app is deployed on Vercel. `client/vercel.json` forwards frontend-origin `/api/*` requests to the backend deployment; its rewrite destination must match the live API host. Root `vercel.json` is an alternative multi-service setup. `VITE_API_URL` overrides the proxy path and direct cross-origin cookie behavior must be verified. Confirm the active Vercel project root before changing routing. The backend uses `CLIENT_URL` for browser-origin checks. Set values privately in Vercel and never paste them into chat or docs.
 
 Before changing Vercel rewrites, project root directories, or domains, inspect the actual Vercel dashboard. If frontend and API are on different domains, test cookie login in real browsers; same-origin proxy/routing is preferable. Verify the external no-show scheduler, Atlas access, backups, and rollback plan before handover.
 

@@ -40,7 +40,7 @@ Ask before a significant behavior/design choice or dependency. Do not claim comp
 
 - `client/`: React JSX, Vite, React Router, Axios, Socket.IO client, plain CSS.
 - `server/`: Node.js, Express, MongoDB Atlas M0, Mongoose, JWT, bcryptjs, dotenv, CORS, Socket.IO, node-cron; CommonJS.
-- Server port defaults to 5001; `CLIENT_URL` is the server's allowed frontend origin list. Set it in Vercel server environment settings, not in source. The client API uses `VITE_API_URL` when supplied (deployed API base should end in `/api`) and otherwise uses same-origin `/api`. Check the actual Vercel project setup before changing either setting. Auth is an HttpOnly cookie; Vercel builds disable Socket.IO and use existing 30-second polling.
+- Server port defaults to 5001; `CLIENT_URL` is the server's allowed frontend origin list. Set it in Vercel server environment settings, not in source. `client/vercel.json` forwards frontend-origin `/api/*` requests to the backend deployment; keep its destination aligned with the actual API host. The root `vercel.json` instead defines Vercel multi-service routing. `VITE_API_URL` overrides the same-origin path; direct cross-origin calls require verified cookie/CORS settings. Confirm the active Vercel project root before changing configs. Auth is an HttpOnly cookie; Vercel builds disable Socket.IO and use existing 30-second polling.
 - Backend uses Node's built-in `node:test`. No frontend test runner is configured.
 - Helmet and express-rate-limit are installed with the user's approval; limits cover login, registration, and failed pickup-code verification.
 
