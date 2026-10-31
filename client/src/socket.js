@@ -9,6 +9,7 @@ let socket = null;
 
 // Safe to call many times: reuses the existing connection
 export function connectSocket() {
+  if (import.meta.env.VERCEL) return null;
   if (!socket) socket = io(SOCKET_URL, { withCredentials: true });
   return socket;
 }

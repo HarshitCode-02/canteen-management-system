@@ -4,10 +4,12 @@
 
 - [ ] Create a separate production MongoDB database; do not point production at local/test data.
 - [ ] Restrict Atlas network access to the hosting provider's documented outbound addresses where possible; use a least-privilege database user.
-- [ ] Create the Render Blueprint from the reviewed `multi-canteen` branch; the one service serves the frontend, API, and Socket.IO from one origin.
-- [ ] Set `MONGO_URI` and a strong unique `JWT_SECRET` only in Render's private environment settings. The blueprint sets `NODE_ENV=production`; Render supplies `RENDER_EXTERNAL_URL`.
-- [ ] Leave `VITE_API_URL` unset for same-origin requests. `vercel.json` is legacy config and is not part of this deployment.
-- [ ] Confirm the Render health check waits for MongoDB readiness and Socket.IO works through the deployed proxy.
+- [ ] Create the Vercel project from the repository root on the reviewed `multi-canteen` branch; confirm the `client` and `server` services load from `vercel.json`.
+- [ ] Confirm `/api/*` rewrites to the `server` service and all other paths rewrite to `client`; this keeps the HttpOnly cookie on one origin.
+- [ ] Set `MONGO_URI`, a strong unique `JWT_SECRET`, and a separate strong `CRON_SECRET` in private Vercel environment settings. Never put secret values in Git or chat.
+- [ ] Leave `VITE_API_URL` unset for production; the production client uses same-origin `/api`.
+- [ ] Configure a trusted external scheduler to call `GET /api/internal/no-show` every minute with `Authorization: Bearer <CRON_SECRET>`. Vercel Hobby Cron is daily-only and cannot meet the no-show timing rule.
+- [ ] Confirm `/api/health` reports database readiness. Vercel disables Socket.IO; verify Dashboard and My Orders update via the 30-second polling fallback.
 - [ ] Test the app with student, staff, and admin roles, including two canteens, order lifecycle, pickup verification, counter payment, report totals, and password reset.
 - [ ] Verify backups can be restored to a separate database before relying on them. Check the current Atlas plan's backup/export capabilities.
 - [ ] Review the [security route audit](./SECURITY-ROUTE-AUDIT.md), complete package-based hardening, and resolve all CI failures.

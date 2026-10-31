@@ -40,7 +40,7 @@ Ask before a significant behavior/design choice or dependency. Do not claim comp
 
 - `client/`: React JSX, Vite, React Router, Axios, Socket.IO client, plain CSS.
 - `server/`: Node.js, Express, MongoDB Atlas M0, Mongoose, JWT, bcryptjs, dotenv, CORS, Socket.IO, node-cron; CommonJS.
-- Server port defaults to 5001; `CLIENT_URL` is comma-separated for CORS/Origin checks locally. Render's `RENDER_EXTERNAL_URL` is allowed automatically. Set `NODE_ENV=development` locally; cookies default Secure outside development. Production client API and Socket.IO always use the same origin; `VITE_API_URL` only configures local Vite development.
+- Server port defaults to 5001; `CLIENT_URL` is comma-separated for CORS/Origin checks locally. Render's `RENDER_EXTERNAL_URL` and Vercel deployment URLs are allowed automatically; custom Vercel same-origin requests are checked against the request host. Set `NODE_ENV=development` locally; cookies default Secure outside development. Production API uses the same origin; `VITE_API_URL` only configures local Vite development. Vercel disables Socket.IO and uses existing polling.
 - Backend uses Node's built-in `node:test`. No frontend test runner is configured.
 - Helmet and express-rate-limit are installed with the user's approval; limits cover login, registration, and failed pickup-code verification.
 
@@ -87,7 +87,7 @@ docs/         phone plan, staff guide, CampusBites pilot, security audit,
 ## Conventions and security
 
 - JSON API; errors `{ "message": "..." }` with appropriate HTTP status.
-- Auth uses a JWT in an HttpOnly cookie; unsafe browser requests must have an allowed Origin. HTTP and Socket.IO use the cookie; `protect` reloads the user each request and password changes/resets invalidate old sessions. Single-origin Render hosting uses `RENDER_EXTERNAL_URL`, avoiding cross-site cookie restrictions.
+- Auth uses a JWT in an HttpOnly cookie; unsafe browser requests must have an allowed Origin. HTTP and Socket.IO use the cookie; `protect` reloads the user each request and password changes/resets invalidate old sessions. Single-origin Render or Vercel routing avoids cross-site cookie restrictions.
 - Roles: `student`, `teacher`, `canteen`, `admin`. Registration creates the default student role; never allow self-assigned privileged roles.
 - `middleware/auth.js` exports `protect`, `authorize(...roles)`, and `canManageCanteen(user, canteenId)`. Admin can manage all; staff only assigned canteens. Check ownership on every relevant server action.
 - Validate Mongo ids with `mongoose.isValidObjectId`. Never return password hashes or pickup codes to staff.
@@ -113,7 +113,7 @@ docs/         phone plan, staff guide, CampusBites pilot, security audit,
 - A secure random 4-digit pickup code is shown only to the owner while active. Staff verify it; after five wrong attempts, further attempts return 429.
 - Socket.IO events use HttpOnly-cookie-authenticated user/canteen rooms; canteen joins require ownership. Dashboard/My Orders also poll every 30 seconds.
 - Pickup slots are ten minutes; the next 12 are displayed and `slotLimit` is checked server-side.
-- **Current no-show rule:** automatic job checks every minute; default no-show after 20 minutes in `ready`, or 30 minutes after the one-time “running late” extension. Staff can manually mark a ready order sooner. Both use `markNoShow`; order status, strike count, and immediate block are transactional. Student owes the full no-show order total. Counter payment for every unpaid no-show order across all canteens must be recorded before unblocking; no separate fine/gateway. Do not restore the old three-strike rule.
+- **Current no-show rule:** long-running hosts run the job every minute; Vercel requires a trusted external scheduler to call `GET /api/internal/no-show` with `CRON_SECRET` every minute (Hobby Cron is only daily). Default no-show is after 20 minutes in `ready`, or 30 minutes after the one-time “running late” extension. Staff can manually mark a ready order sooner. Both use `markNoShow`; order status, strike count, and immediate block are transactional. Student owes the full no-show order total. Counter payment for every unpaid no-show order across all canteens must be recorded before unblocking; no separate fine/gateway. Do not restore the old three-strike rule.
 
 ## Implemented / done list
 
@@ -124,7 +124,7 @@ docs/         phone plan, staff guide, CampusBites pilot, security audit,
 - Day 22: login/register per-IP rate limits, failed pickup-code throttling, Helmet, HttpOnly cookie sessions, unsafe-request Origin checks, sanitized production errors, a 100 KB JSON body cap, transactional order/no-show updates, and order quantity caps are implemented. Limits on other routes and broader validation remain **not implemented**.
 - Day 23: basic responsive/touch CSS changes exist; real-phone verification is still pending.
 - Backend tests and client production build passed in the last checked workspace; this does not prove full DB-backed or live-device behavior.
-- Dockerfiles, Compose, CI workflow, a single-service Render blueprint, and preparation guides exist. Deployment has not happened; `vercel.json` remains unused legacy config.
+- Dockerfiles, Compose, CI workflow, a single-service Render blueprint, and Vercel multi-service config exist. Deployment has not happened. Vercel uses `client` and `server`; API requests route through `/api/*`; no inter-service binding is needed. Vercel runtime needs the external no-show scheduler and uses polling rather than Socket.IO.
 
 ## Remaining work plan (status is honest)
 
@@ -134,14 +134,14 @@ docs/         phone plan, staff guide, CampusBites pilot, security audit,
 - **Day 25 real menu — NOT DONE:** enter CampusBites menu only after owner confirms data. Do not run `server/seed.js` against real canteen data; it replaces menu items for its sample canteens.
 - **Day 26 staff training — NOT DONE:** staff quick guide exists; train staff and confirm they can use it.
 - **Day 27 pilot/feedback — NOT DONE:** pilot plan exists; run a small lunch pilot and collect feedback.
-- **Days 28–29 deployment — NOT DONE:** single-service Render config is prepared; create the Render Blueprint, configure Atlas and private environment values, then test health, auth cookie, and Socket.IO.
+- **Days 28–29 deployment — NOT DONE:** Vercel multi-service config is prepared; create the project from the repo root, configure Atlas and private `MONGO_URI`, `JWT_SECRET`, and `CRON_SECRET`, configure a trusted minute scheduler, then test health, auth cookie, and polling.
 - **Day 30 launch — NOT DONE:** checklist exists; verify backup/restore, rollback, README, and launch readiness. Merge to `main` only after my explicit approval.
 
 ## Known issues / limitations
 
 - No root `.gitignore`; service-level ignore files cover the existing `server/.env` and `client/.env`. Check tracking/ignores before any commit; never stage secrets.
 - No rate limits beyond login/register and pickup verification; frontend automated tests and database-backed API integration tests are missing. Current client lint reports React effect/state lint errors.
-- MongoDB transaction concurrency behavior needs verification against Atlas or a local replica set. Single-origin Render login and Socket.IO still need production smoke tests.
+- MongoDB transaction concurrency behavior needs verification against Atlas or a local replica set. Vercel deployment, cookie login/refresh, external no-show scheduling, and polling still need production smoke tests.
 - Compose keeps Atlas external; local Docker startup has not been verified. CI lint may fail; no image publishing/deployment.
 - No real CampusBites menu, phone testing, pilot, user onboarding, production deployment, or rollback rehearsal has been completed.
 

@@ -260,7 +260,7 @@ Student / Staff / Admin browser
 |---|---|
 | `App.jsx` | Route table, wraps pages in providers/layout |
 | `api.js` | Axios instance (uses same-origin `/api` in production; local Vite development may use `VITE_API_URL`; sends credentials for the HttpOnly auth cookie) and `errorMessage(err)` helper |
-| `socket.js` | `connectSocket()` (reuses one cookie-authenticated connection), `disconnectSocket()`. Production Socket.IO is always same-origin; local Vite development may use `VITE_API_URL` |
+| `socket.js` | `connectSocket()` (reuses one cookie-authenticated connection), `disconnectSocket()`. Vercel builds disable Socket.IO and use polling; other builds use same-origin unless local `VITE_API_URL` is set |
 | `sound.js` | `enableSound()` (must be called from a click; resumes the AudioContext) and `beep()` (880 Hz tone, 0.5 s) |
 | `useStaffCanteen.js` | Hook: loads the canteens a staff user may manage (admin: all), remembers the selected `canteenId` |
 | `context/AuthContext.jsx` | Holds `user`, `loading`, `login`, `register`, `logout`; restores session through `/auth/me` using the HttpOnly cookie; closes the socket when `user` becomes empty |
@@ -515,7 +515,7 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 **Socket.IO** keeps an open connection so the server can push messages instantly. **Polling** means asking the server again and again on a timer.
 
 **Actually implemented**
-- Client: `connectSocket()` connects with `auth: { token }` after login; `disconnectSocket()` runs when the user becomes empty (logout).
+- Client: `connectSocket()` uses the HttpOnly auth cookie; `disconnectSocket()` runs when the user becomes empty (logout).
 - Server verifies the JWT on connection. Each user joins `user:<id>`. Staff/admin ask to join `canteen:<id>` with `joinCanteen`; the server checks `canManageCanteen`.
 - Events (small payloads, no pickup code):
 
@@ -530,6 +530,8 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 - **Polling fallback:** Dashboard and My Orders call `load` every **30 seconds** (`setInterval`, cleared on unmount/canteen change).
 
 **Why both?** Sockets can drop (phone sleeps, bad Wi-Fi); polling guarantees the screen eventually catches up.
+
+**Vercel:** the client disables Socket.IO because the server is a function, and relies on the existing 30-second polling. A trusted external scheduler must call `GET /api/internal/no-show` every minute with `CRON_SECRET`; Vercel Hobby Cron is limited to once per day and is not frequent enough for the current no-show rule.
 
 **Limitation:** a PWA manifest/icon exists, but there is no service worker; mobile install/notification behavior still needs device testing.
 
@@ -639,6 +641,8 @@ The safe templates are `server/.env.example` and `client/.env.example`. Copy the
 | `PORT` | Server listen port; defaults to 5001 |
 | `NODE_ENV` | Cookie security mode; use `development` locally, otherwise cookies default to Secure/SameSite=None |
 | `VITE_API_URL` | Local Vite development API URL only; production builds use same-origin `/api` and ignore this setting |
+| `CRON_SECRET` | Secret required by `GET /api/internal/no-show`; a trusted scheduler must send `Authorization: Bearer <secret>` |
+| `VERCEL_URL` | Supplied by Vercel; used for allowed-origin checks. Custom Vercel domains are checked against the request host |
 
 `server/.env` is loaded by Docker Compose and `dotenv`. Keep the Atlas URI and JWT secret in that ignored local file or a secrets manager; do not put them in the Dockerfiles, Compose file, or GitHub Actions.
 
@@ -683,7 +687,7 @@ npm --prefix client run build
 npm --prefix client run lint
 ```
 
-The backend has 12 dependency-light tests using Node's built-in test runner; they cover authorization helpers, slots, report logic, and no-show/payment behavior without connecting to MongoDB. The client has no automated test script. The production build succeeds in the current workspace. Frontend lint currently fails on React effect/state lint errors; CI reports the failure and does not skip it.
+The backend has dependency-light tests using Node's built-in test runner; they cover authorization helpers, origin checks, cron authentication, slots, report logic, and no-show/payment behavior without connecting to MongoDB. The client has no automated test script. Frontend lint currently reports existing React effect/state and Fast Refresh lint errors; CI reports the failure and does not skip it.
 
 Not yet covered by automated tests: real HTTP/API integration with a disposable database, end-to-end student/staff/admin flows, cart UI, and React component behavior. Do not point tests at the production Atlas database.
 
@@ -699,7 +703,9 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 | `EADDRINUSE :::5001` | Old server still running | `lsof -i :5001`, then `kill <PID>` |
 | No `MongoDB connected` | Wrong URI or Atlas IP not allowed | Check `.env` and Atlas Network Access |
 | CORS error in browser | `CLIENT_URL` missing your separate client's origin, or local origin mismatch | Add the exact origin to `CLIENT_URL`; same-origin Render hosting uses `RENDER_EXTERNAL_URL` automatically |
-| `Not authorized, token missing` after login | Browser is calling an API on a different origin, so the HttpOnly cookie is not available to the request | Deploy the client and server together using the Render Blueprint; production builds always use same-origin API and Socket.IO |
+| `Not authorized, token missing` after login | API path is routed to the wrong service, or the browser did not send its HttpOnly cookie | Ensure `/api/*` rewrites to the Vercel `server` service and the client/server share one public origin; log in again after deployment |
+| No live Socket.IO updates on Vercel | Vercel deployment disables the persistent Socket.IO client | Dashboard and My Orders refresh through their 30-second polling fallback |
+| Automatic no-show job is not running on Vercel | Serverless functions do not keep the local node-cron process alive | Configure a trusted scheduler to request `/api/internal/no-show` every minute with `CRON_SECRET`; Vercel Hobby Cron is limited to once per day |
 | Socket error `Invalid token` | Not logged in or bad `JWT_SECRET` | Log in again, check env |
 | No beep | Sound not enabled | Click **Enable sound** once |
 | Blank page after edit | JSX syntax error (for example a duplicated `return (`) | Read the Vite terminal error |
@@ -709,11 +715,11 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 
 ## 21. Deployment
 
-**Current state: nothing is deployed.** The selected setup is a single Render web service, which serves the React build, Express API, and Socket.IO from the same origin. This avoids third-party-cookie restrictions and does not require a custom domain. The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pushes, pull requests, and manual dispatch. It uses Node.js 22 and both lockfiles; it runs backend tests and JS syntax checks, client build and lint, and builds both Docker images. There are no frontend tests configured, so the workflow reports that rather than inventing tests. CI does not publish images, deploy, or connect to MongoDB.
+**Current state: nothing is deployed.** The selected target is a Vercel multi-service project defined in `vercel.json`: `client` serves the Vite app, `/api/*` routes to the Express `server`, and all other paths route to the client. The services use one public origin for cookie authentication; no internal service binding is needed because browser API calls use the public rewrite. Configure `MONGO_URI`, `JWT_SECRET`, and `CRON_SECRET` privately for the server service. Vercel builds disable Socket.IO and rely on the existing 30-second polling. A trusted external scheduler must call `GET /api/internal/no-show` every minute with the configured bearer secret; Vercel Hobby Cron is limited to once per day, too infrequent for the current no-show rule. No Vercel deployment or live smoke test has been completed.
 
 The frontend lint check currently reports React effect/state lint errors. CI will report the failure rather than skipping the configured lint command.
 
-The Render blueprint in `render.yaml` builds the client and server and serves them together; `vercel.json` is an unused legacy configuration. To deploy, create a Render Blueprint from the `multi-canteen` branch, configure `MONGO_URI` and `JWT_SECRET` privately in the Render dashboard, and configure Atlas access for Render. Render supplies `RENDER_EXTERNAL_URL`; the server uses it for same-origin CORS and request-origin checks. `NODE_ENV=production` is set by the blueprint. No deployment has been run or tested yet. Verify the health route, login cookie, Socket.IO, and a test order before inviting users. Review backup restoration and resolve CI lint failures. The current Compose Dockerfiles are development configurations, not production images.
+To deploy, create the Vercel project from the repository root and `multi-canteen` branch so it reads the multi-service `vercel.json`; set the server environment variables privately and configure Atlas network access. Vercel supplies deployment URL variables. Verify `/api/health`, cookie login/refresh, student/staff/admin authorization, polling updates, the external no-show scheduler, and a test order before inviting users. The Render blueprint remains an alternative single-service deployment. Review backup restoration and resolve CI lint failures. The current Compose Dockerfiles are development configurations, not production images.
 
 ---
 

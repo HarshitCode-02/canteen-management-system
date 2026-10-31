@@ -69,4 +69,4 @@ function startNoShowJob() {
   console.log("No-show job started");
 }
 
-module.exports = { markNoShow, startNoShowJob };
+module.exports = { markNoShow, runNoShowCheck, startNoShowJob };

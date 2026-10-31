@@ -6,10 +6,12 @@ const http = require('http');
 const path = require("node:path");
 const { initSocket } = require('./socket');
 const csrfOrigin = require("./middleware/csrfOrigin");
+const cronAuth = require("./middleware/cronAuth");
 const securityHeaders = require("./middleware/securityHeaders");
 const errorHandler = require("./middleware/errorHandler");
 const serveClient = require("./middleware/serveClient");
-const { getAllowedOrigins } = require("./allowedOrigins");
+const { getAllowedOrigins, isAllowedOrigin } = require("./allowedOrigins");
+const { runNoShowCheck, startNoShowJob } = require("./noShow");
 
 const missingEnvironment = ["MONGO_URI", "JWT_SECRET"]
   .filter((name) => !process.env[name]);
@@ -18,16 +20,38 @@ if (missingEnvironment.length > 0) {
 }
 
 const app = express();
+let databaseConnection;
 
 app.set("trust proxy", 1);
 app.use(securityHeaders);
 const allowedOrigins = getAllowedOrigins();
-if (allowedOrigins.length === 0) {
-  throw new Error("Set CLIENT_URL or run on a host that provides RENDER_EXTERNAL_URL");
+if (allowedOrigins.length === 0 && process.env.VERCEL !== "1") {
+  throw new Error("Set CLIENT_URL or run on a host that provides RENDER_EXTERNAL_URL or VERCEL_URL");
 }
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(cors((req, callback) => {
+  const origin = req.get("origin");
+  callback(null, {
+    origin: origin ? isAllowedOrigin(origin, req) : false,
+    credentials: true,
+  });
+}));
 app.use(csrfOrigin);
 app.use(express.json({ limit: "100kb" }));
+
+async function connectToDatabase() {
+  if (mongoose.connection.readyState === 1) return;
+  if (!databaseConnection || mongoose.connection.readyState === 0 || mongoose.connection.readyState === 3) {
+    databaseConnection = mongoose.connect(process.env.MONGO_URI).catch((err) => {
+      databaseConnection = null;
+      throw err;
+    });
+  }
+  await databaseConnection;
+}
+
+app.use((req, res, next) => {
+  connectToDatabase().then(() => next(), next);
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -53,6 +77,15 @@ app.use("/api/canteens", canteenRoutes);
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
+app.get("/api/internal/no-show", cronAuth, async (req, res, next) => {
+  try {
+    await runNoShowCheck();
+    res.json({ status: "completed" });
+  } catch (err) {
+    next(err);
+  }
+});
+
 serveClient(app, path.resolve(__dirname, "../client/dist"));
 
 // 404 handler for unknown routes
@@ -64,16 +97,19 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5001;
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('MongoDB connected');
-    const server = http.createServer(app);
-    initSocket(server);
-    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-    require("./noShow").startNoShowJob();
-  })
-  .catch((err) => {
-    console.error("MongoDB connection failed", { errorName: err.name || "Error" });
-    process.exit(1);
-  });
+module.exports = app;
+
+if (require.main === module) {
+  connectToDatabase()
+    .then(() => {
+      console.log('MongoDB connected');
+      const server = http.createServer(app);
+      initSocket(server);
+      server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+      startNoShowJob();
+    })
+    .catch((err) => {
+      console.error("MongoDB connection failed", { errorName: err.name || "Error" });
+      process.exit(1);
+    });
+}
