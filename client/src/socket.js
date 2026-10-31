@@ -1,7 +1,9 @@
 import { io } from "socket.io-client";
 
-// VITE_API_URL is usually ".../api"; the socket lives at the server root
-const SOCKET_URL = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
+// Production is served with the API, so keep cookie-authenticated sockets same-origin.
+const SOCKET_URL = import.meta.env.PROD
+  ? ""
+  : (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
 
 let socket = null;
 

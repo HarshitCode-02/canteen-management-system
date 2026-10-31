@@ -40,7 +40,7 @@ Ask before a significant behavior/design choice or dependency. Do not claim comp
 
 - `client/`: React JSX, Vite, React Router, Axios, Socket.IO client, plain CSS.
 - `server/`: Node.js, Express, MongoDB Atlas M0, Mongoose, JWT, bcryptjs, dotenv, CORS, Socket.IO, node-cron; CommonJS.
-- Server port defaults to 5001; `CLIENT_URL` is comma-separated for CORS/Origin checks locally. Render's `RENDER_EXTERNAL_URL` is allowed automatically. Set `NODE_ENV=development` locally; cookies default Secure outside development. Client API uses same-origin `/api` unless `VITE_API_URL` is set.
+- Server port defaults to 5001; `CLIENT_URL` is comma-separated for CORS/Origin checks locally. Render's `RENDER_EXTERNAL_URL` is allowed automatically. Set `NODE_ENV=development` locally; cookies default Secure outside development. Production client API and Socket.IO always use the same origin; `VITE_API_URL` only configures local Vite development.
 - Backend uses Node's built-in `node:test`. No frontend test runner is configured.
 - Helmet and express-rate-limit are installed with the user's approval; limits cover login, registration, and failed pickup-code verification.
 

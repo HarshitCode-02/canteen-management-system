@@ -190,7 +190,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 |---|---|---|
 | **React** (Vite, JSX) | UI library | All pages and components in `client/src` |
 | **react-router-dom** | Page routing | Routes like `/dashboard`; `ProtectedRoute` guards them |
-| **Axios** | HTTP client | `client/src/api.js` uses `VITE_API_URL` when set, otherwise the same-origin `/api`, and sends the HttpOnly-cookie session |
+| **Axios** | HTTP client | `client/src/api.js` uses same-origin `/api` in production and sends the HttpOnly-cookie session; local Vite development may use `VITE_API_URL` |
 | **Plain CSS** | Styling | `client/src/index.css` (classes `card`, `order-card`, `dash-grid`...) |
 | **Node.js** | JS runtime | Runs the server |
 | **Express** | Web framework | Routes, middleware, JSON API (`server.js`) |
@@ -259,8 +259,8 @@ Student / Staff / Admin browser
 | File | Responsibility |
 |---|---|
 | `App.jsx` | Route table, wraps pages in providers/layout |
-| `api.js` | Axios instance (uses `VITE_API_URL` or same-origin `/api`, sends credentials for the HttpOnly auth cookie) and `errorMessage(err)` helper |
-| `socket.js` | `connectSocket()` (reuses one cookie-authenticated connection), `disconnectSocket()`. Uses same-origin Socket.IO unless `VITE_API_URL` points to a separate API |
+| `api.js` | Axios instance (uses same-origin `/api` in production; local Vite development may use `VITE_API_URL`; sends credentials for the HttpOnly auth cookie) and `errorMessage(err)` helper |
+| `socket.js` | `connectSocket()` (reuses one cookie-authenticated connection), `disconnectSocket()`. Production Socket.IO is always same-origin; local Vite development may use `VITE_API_URL` |
 | `sound.js` | `enableSound()` (must be called from a click; resumes the AudioContext) and `beep()` (880 Hz tone, 0.5 s) |
 | `useStaffCanteen.js` | Hook: loads the canteens a staff user may manage (admin: all), remembers the selected `canteenId` |
 | `context/AuthContext.jsx` | Holds `user`, `loading`, `login`, `register`, `logout`; restores session through `/auth/me` using the HttpOnly cookie; closes the socket when `user` becomes empty |
@@ -638,7 +638,7 @@ The safe templates are `server/.env.example` and `client/.env.example`. Copy the
 | `CLIENT_URL` | Optional comma-separated browser origins for local/separate-client hosting; Render automatically allows its own `RENDER_EXTERNAL_URL` |
 | `PORT` | Server listen port; defaults to 5001 |
 | `NODE_ENV` | Cookie security mode; use `development` locally, otherwise cookies default to Secure/SameSite=None |
-| `VITE_API_URL` | Optional client API base URL; leave unset when the client and server share one origin |
+| `VITE_API_URL` | Local Vite development API URL only; production builds use same-origin `/api` and ignore this setting |
 
 `server/.env` is loaded by Docker Compose and `dotenv`. Keep the Atlas URI and JWT secret in that ignored local file or a secrets manager; do not put them in the Dockerfiles, Compose file, or GitHub Actions.
 
@@ -699,6 +699,7 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 | `EADDRINUSE :::5001` | Old server still running | `lsof -i :5001`, then `kill <PID>` |
 | No `MongoDB connected` | Wrong URI or Atlas IP not allowed | Check `.env` and Atlas Network Access |
 | CORS error in browser | `CLIENT_URL` missing your separate client's origin, or local origin mismatch | Add the exact origin to `CLIENT_URL`; same-origin Render hosting uses `RENDER_EXTERNAL_URL` automatically |
+| `Not authorized, token missing` after login | Browser is calling an API on a different origin, so the HttpOnly cookie is not available to the request | Deploy the client and server together using the Render Blueprint; production builds always use same-origin API and Socket.IO |
 | Socket error `Invalid token` | Not logged in or bad `JWT_SECRET` | Log in again, check env |
 | No beep | Sound not enabled | Click **Enable sound** once |
 | Blank page after edit | JSX syntax error (for example a duplicated `return (`) | Read the Vite terminal error |
