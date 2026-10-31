@@ -197,6 +197,7 @@ export default function MyOrders() {
 
   // load now, then slow polling every 30 seconds (fallback if the socket drops)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- start the initial API load when this page mounts
     load();
     const timer = setInterval(load, 30000);
     return () => clearInterval(timer);

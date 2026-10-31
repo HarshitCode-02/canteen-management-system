@@ -17,6 +17,7 @@ export default function CanteenMenu() {
 
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show loading instead of the previous canteen's menu
     setLoading(true);
     setError("");
     setPendingItem(null);

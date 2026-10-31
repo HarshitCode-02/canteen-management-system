@@ -47,6 +47,7 @@ export default function Dashboard() {
 
   // load now, then poll every 30 seconds as a fallback; reset the list when the canteen changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear previous canteen orders before loading the selected canteen
     setOrders([]);
     setLoading(true);
     load();

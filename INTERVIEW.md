@@ -1,10 +1,10 @@
 # Interview Guide
 
-Use this as a practice guide, not a script to memorize. Be clear about what is implemented versus what has not been tested or deployed.
+Use this as a practice guide, not a script to memorize. The owner reports deployment on Vercel; distinguish that from checks not independently verified here.
 
 ## 30-second pitch
 
-I am building a MERN pre-order platform for college canteens. Students and teachers can choose a canteen, browse its menu, select a pickup slot, and collect their order at the counter. There is no delivery or online payment. Staff get a live order dashboard, and admins manage canteens and staff. I used JWT role checks, per-canteen ownership checks, server-side price calculation, pickup codes, Socket.IO updates, and MongoDB. The code is in active development; real-phone testing and deployment are still pending.
+I built a MERN pre-order platform for college canteens. Students and teachers choose a canteen, browse its menu, select a pickup slot, and collect their order at the counter. There is no delivery or online payment. Staff manage orders, and admins manage canteens and staff. I used HttpOnly-cookie JWT authentication, per-canteen ownership checks, server-side price calculation, pickup codes, MongoDB, and polling with Socket.IO support outside Vercel. The owner reports the app is deployed on Vercel; real-device testing and a canteen pilot should only be claimed after they are completed.
 
 ## Two-minute walkthrough
 
@@ -12,7 +12,7 @@ I am building a MERN pre-order platform for college canteens. Students and teach
 2. The menu shows categories, search, images, popular items, specials, rush, and an estimated wait.
 3. The cart holds one canteen's items. The student chooses one of the available pickup slots and can add a short note.
 4. The API checks the user, canteen status, item availability, active-order rule, and slot capacity. It looks up prices from MongoDB, saves item snapshots, increments a per-canteen/day counter, and creates a pickup code.
-5. The staff dashboard receives a Socket.IO event in that canteen's room and reloads the orders. It also polls every 30 seconds in case the socket disconnects.
+5. The staff dashboard refreshes orders by polling. The code also supports authenticated Socket.IO rooms on long-running hosts; the Vercel client build disables Socket.IO.
 6. Staff move an order from placed to preparing to ready. The student shows the pickup code; staff verify it at collection and separately record cash/UPI received at the counter.
 7. Admins manage canteens, staff assignments, blocked users, owner password resets, and canteen reports. The first no-show blocks a student; staff record the full order amount as paid before unblocking.
 
@@ -20,17 +20,17 @@ I am building a MERN pre-order platform for college canteens. Students and teach
 
 ```text
 React + Vite browser
-  | Axios: JSON API + bearer JWT
-  | Socket.IO: JWT-authenticated live events
+  | Axios: JSON API + HttpOnly-cookie session
+  | Vercel API URL or same-origin /api routing
   v
-Express / Node server
+Express / Node API (Vercel)
   | protect -> authorize -> canManageCanteen
   | controllers and Mongoose models
   v
 MongoDB Atlas (external)
 ```
 
-The browser uses HTTP for reads and changes. Socket.IO carries small update notifications; clients refetch the full data over HTTP. The database is MongoDB Atlas, not a local Compose database.
+The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 seconds; Socket.IO is disabled by the Vercel build. The code supports Socket.IO on a long-running Node host. The owner reports that the deployed site works, but this workspace has not independently checked the live domains, Vercel environment settings, or Atlas connection.
 
 ## Technical challenges and honest answers
 
@@ -38,19 +38,19 @@ The browser uses HTTP for reads and changes. Socket.IO carries small update noti
 - **Canteen ownership:** role middleware limits staff/admin endpoints, and controller checks use `canManageCanteen` for the target canteen/order. Staff can manage only their assigned canteens; admin can manage all.
 - **Price tampering:** the client sends menu item ids and quantities, not trusted prices. The server loads current menu prices and saves name/price snapshots in the order.
 - **Pickup code abuse:** the server generates a four-digit code with Node's secure `crypto.randomInt`; it hides the code from staff responses and limits verification to five wrong attempts per order. Further attempts return 429.
-- **Live updates:** the server authenticates Socket.IO connections with JWT. Users join their own room; staff can join only assigned canteen rooms. The event payload excludes pickup codes. Polling is the fallback.
-- **Slot limits:** the server checks active orders in each ten-minute slot against `slotLimit`. This is a count-then-insert check, not an atomic reservation, so concurrent requests can exceed the limit. I would address this before relying on it under heavy traffic.
+- **Live updates:** the server authenticates Socket.IO connections with the cookie. Users join their own room; staff can join only assigned canteen rooms. The event payload excludes pickup codes. Vercel builds disable sockets, so the deployed UI uses polling.
+- **Slot limits:** order creation uses a MongoDB transaction and per-user/per-canteen write locks around active-order and slot checks. Unit tests cover the transaction path with stubs; concurrency still needs a database-backed test on a replica-set database.
 - **Single-to-multi-canteen migration:** the migration script creates/reuses CampusBites, assigns legacy menu items/orders without a canteen, assigns existing canteen staff, and copies old counters using the greater sequence. A backup and a test-database run are still important before any real migration.
-- **No-show handling:** automatic and manual paths share `markNoShow`; the first no-show blocks the account. Payment is recorded by staff at the counter and must be recorded before unblocking. Blocking and order status are separate database writes, so they are not transactionally atomic.
+- **No-show handling:** automatic and manual paths share `markNoShow`; the first no-show blocks the account. Payment is recorded by staff at the counter and must be recorded before unblocking. The no-show order update and user block are in a MongoDB transaction. On Vercel, verify an external trusted scheduler calls the protected no-show endpoint every minute; the in-process cron is for long-running servers.
 
 ## Design decisions and trade-offs
 
 - **No online payment:** the project is for pickup and payment at the canteen counter. Cash and UPI are recorded by staff; there is no payment provider or gateway.
-- **Polling plus Socket.IO:** sockets make order changes feel immediate; 30-second polling makes the UI recover if a phone sleeps or loses its socket.
+- **Polling plus Socket.IO:** the Vercel UI uses polling every 30 seconds. The source also supports Socket.IO on long-running deployments, but the Vercel build disables it.
 - **Separate `status` and `paymentStatus`:** food workflow and whether money was received are different facts. An order can be collected but still unpaid; marking collected does not automatically mark payment received.
 - **One canteen per cart:** this keeps one order routed to one kitchen/counter and one pickup slot.
 - **External Atlas:** Compose starts the app services but does not replace the existing cloud database. That preserves the project's database setup.
-- **JWT in localStorage:** simple for this learning project, but exposed to JavaScript if the site has an XSS issue. A production security review is still needed.
+- **HttpOnly cookie session:** the JWT is not exposed to browser JavaScript. If the client/API use different domains, cookie behavior must be checked in real browsers; same-origin routing is preferable.
 
 ## 20 likely interview questions
 
@@ -66,22 +66,22 @@ The browser uses HTTP for reads and changes. Socket.IO carries small update noti
 10. **How are order numbers generated?** An atomic MongoDB counter is scoped to a canteen and IST date.
 11. **How does pickup verification work?** Staff enter the student's code; the server checks it before marking the order collected.
 12. **How do you limit code guessing?** The code has five attempts; further verification attempts return 429.
-13. **How do live updates work?** Authenticated Socket.IO rooms receive small events, and the UI refetches current data.
-14. **Why keep polling?** It is a fallback when a socket disconnects or a phone sleeps.
-15. **How do pickup slots work?** They are ten-minute windows; the server counts active orders and compares the count with `slotLimit`.
-16. **Is the slot limit race-proof?** Not currently; count and insert are separate operations, so simultaneous requests can exceed it.
+13. **How do live updates work?** Vercel uses 30-second polling; the code also supports authenticated Socket.IO rooms on long-running hosts.
+14. **Why keep polling?** It is the deployed Vercel behavior and a fallback when sockets are unavailable or a phone sleeps.
+15. **How do pickup slots work?** They are ten-minute windows; the server checks active orders against `slotLimit` inside its order transaction.
+16. **Is the slot limit race-proof?** The code uses transaction locks to prevent concurrent overbooking; this still needs a database-backed concurrency test.
 17. **Why are status and payment separate?** Food can be collected while the counter payment is still pending.
 18. **What is the current no-show rule?** A manually or automatically recorded first no-show blocks the account; staff record the full order total as counter-paid before unblocking.
 19. **How did you migrate to multiple canteens?** The migration script attaches legacy unassigned records to CampusBites, assigns staff, and copies counters.
-20. **What is not finished?** Real-device tests, pilot, deployment, API integration tests, frontend component tests, rate limiting, Helmet, and slot-race protection.
+20. **What is not finished?** The owner reports Vercel deployment is working. Real-device tests, pilot, database-backed API/concurrency tests, frontend component tests, external no-show scheduler verification, backup/restore rehearsal, and rollback testing still need confirmation. Helmet and login/register/pickup-code limits are implemented.
 
 ## Resume bullets
 
 - Built a React/Vite and Express/Mongoose pre-order platform with student, staff, and admin roles.
 - Implemented server-side order validation, menu-price recalculation, item snapshots, and pickup-code verification.
-- Added per-canteen order ownership, IST daily counters, ten-minute pickup slots, and Socket.IO updates with polling fallback.
+- Added per-canteen order ownership, IST daily counters, ten-minute pickup slots, and 30-second polling; the code supports Socket.IO on long-running hosts.
 - Created staff sales reports and admin workflows for canteens, staff assignments, blocked users, and password resets.
-- Configured development Docker Compose and GitHub Actions CI; deployment and real-user testing remain pending.
+- Configured development Docker Compose, GitHub Actions validation, and Vercel deployment support. The owner reports the site is deployed; do not claim real users, phone testing, or a successful pilot without evidence.
 
 ## Two-minute live demo script
 
@@ -92,4 +92,4 @@ Use safe test accounts and test data only. Do not demonstrate with real student 
 - **0:40–1:05:** Sign in as assigned test staff; show the live order, prepare it, and mark it ready.
 - **1:05–1:25:** Return to the student view and show the ready status and pickup code. Explain that staff verify the code at the counter.
 - **1:25–1:45:** Show staff payment confirmation and the sales report; explain that cash/UPI is counter-only.
-- **1:45–2:00:** Show the admin view and explain staff/canteen ownership. State honestly that real phones, pilot, and production deployment are pending.
+- **1:45–2:00:** Show the admin view and explain staff/canteen ownership. Mention the Vercel deployment only as owner-verified; be honest about any remaining phone, pilot, backup, or rollback checks.

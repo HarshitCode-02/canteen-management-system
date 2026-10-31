@@ -28,6 +28,7 @@ export default function ManageMenu() {
   }, [canteenId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear previous canteen items before loading the selected canteen
     setMenu([]);
     setDrafts({});
     setLoading(true);

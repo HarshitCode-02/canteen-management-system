@@ -6,7 +6,7 @@ Full-stack Canteen Management System using React, Node.js, Express and MongoDB
 
 A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a small "Swiggy inside the college" but **with no delivery** and **no online payment**. Students and teachers pick a canteen, choose food, choose a pickup time, then collect the food and pay cash or UPI at the counter.
 
-**Status:** the multi-canteen code and local development configuration are in the `multi-canteen` worktree. Backend unit tests and the frontend production build pass in this workspace; full app runtime with a database and Docker startup are not verified here. The project is **not deployed**; real-phone tests, the CampusBites pilot, and production setup are still pending. Do not merge this branch into `main` without approval.
+**Status:** the owner reports that the finished multi-canteen application is deployed on Vercel and working. This repository does not independently verify the live site, Vercel environment settings, external no-show scheduler, real-device behavior, or a canteen pilot. `main` is the deployed product branch; start future feature work on a separate branch and keep production changes deliberate.
 
 ---
 
@@ -190,7 +190,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 |---|---|---|
 | **React** (Vite, JSX) | UI library | All pages and components in `client/src` |
 | **react-router-dom** | Page routing | Routes like `/dashboard`; `ProtectedRoute` guards them |
-| **Axios** | HTTP client | `client/src/api.js` uses same-origin `/api` in production and sends the HttpOnly-cookie session; local Vite development may use `VITE_API_URL` |
+| **Axios** | HTTP client | `client/src/api.js` uses `VITE_API_URL` when configured, otherwise same-origin `/api`, and sends the HttpOnly-cookie session |
 | **Plain CSS** | Styling | `client/src/index.css` (classes `card`, `order-card`, `dash-grid`...) |
 | **Node.js** | JS runtime | Runs the server |
 | **Express** | Web framework | Routes, middleware, JSON API (`server.js`) |
@@ -199,8 +199,8 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | **jsonwebtoken (JWT)** | Signed login tokens | Payload includes user id, role, and token version |
 | **bcryptjs** | Password hashing | Passwords are stored as `passwordHash` |
 | **dotenv** | Loads `.env` | Secrets and config |
-| **cors** | Cross-origin rules | Allows `CLIENT_URL` origins locally; on Render the service's own `RENDER_EXTERNAL_URL` is allowed automatically |
-| **Socket.IO** (server) and **socket.io-client** | Live two-way messages | New orders and status changes pushed instantly |
+| **cors** | Cross-origin rules | Allows configured client origins and same-origin requests for Vercel deployments |
+| **Socket.IO** (server) and **socket.io-client** | Live two-way messages | Supported on long-running hosts; the Vercel build uses polling |
 | **Web Audio API** | Browser sound | The new-order beep in `sound.js` |
 | **Notification API** | Browser alerts | "Order ready" alert on My Orders |
 | **nodemon** | Auto-restart in dev | `npm run dev` in `server/` |
@@ -245,7 +245,7 @@ Student / Staff / Admin browser
 1. **HTTP (request/response):** the browser asks, the server answers once. Used for *all* real data and all changes (login, place order, change status).
 2. **Socket.IO (server push):** a small "something changed" message pushed to the right people. The browser then calls HTTP again to fetch the fresh data. No order data or pickup code travels in the socket message.
 
-**Polling** (a timer calling the API every 30s) still exists in Dashboard and My Orders as a safety net if the socket drops.
+**Polling** (a timer calling the API every 30s) is enabled in Dashboard and My Orders. It is the live Vercel behavior; Socket.IO is disabled by the Vercel client build.
 
 **What happens when you click "Mark ready":** React calls `api.patch('/orders/:id/status')` → the browser sends its HttpOnly cookie → Express runs `protect` → `authorize` → `updateStatus` checks ownership and allowed transition → saves to MongoDB → calls `notifyOrder` (socket push) → returns JSON → Dashboard reloads the list.
 
@@ -456,6 +456,7 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected brows
 | Method | Endpoint | Purpose | Who can call it |
 |---|---|---|---|
 | GET | `/api/health` | API and MongoDB connection health | Public |
+| GET | `/api/internal/no-show` | Run the overdue no-show check | Trusted scheduler only; requires `CRON_SECRET` |
 | POST | `/api/auth/register` | Register an account; new registrations get the student role | Public |
 | POST | `/api/auth/login` | Sign in | Public |
 | POST | `/api/auth/logout` | Clear the auth cookie | Public, Origin-checked |
@@ -542,18 +543,18 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 **Current implementation**
 - Passwords hashed with `bcryptjs`; `passwordHash` is `select: false` and never returned.
 - JWT with payload containing user id, role, and token version, stored in an HttpOnly cookie; user reloaded from DB on every request. Password changes/resets increment the version and invalidate older sessions.
-- Unsafe browser methods require an `Origin` matching an entry in `CLIENT_URL`; CORS allows credentials for those origins.
+- Unsafe browser methods require an allowed `Origin`; CORS allows credentials for configured client and Vercel same-origin requests.
 - Role checks (`authorize`) and per-canteen checks (`canManageCanteen`) on staff endpoints.
 - Ids validated with `mongoose.isValidObjectId`.
 - Prices computed by the server; each item quantity and merged duplicate quantity are limited to 1-20, with at most 20 submitted item lines.
 - Pickup code: secure random, hidden from staff and from non-active orders, 5 wrong attempts then 429.
 - Socket connections require a valid cookie JWT; room joins are ownership-checked.
-- CORS limited to the origins listed in `CLIENT_URL`; the same setting is used by Socket.IO.
+- CORS allows configured `CLIENT_URL` origins plus supported Vercel/same-origin requests; Socket.IO uses configured origins on long-running hosts.
 - JSON request bodies are capped at 100 KB; production 5xx responses hide internal messages, and logs omit error details.
 - Passwords are hashed; registration requires name, email, phone, and a password of at least six characters. Registration always creates the default student role.
 - Secrets are read from environment variables; never commit local `.env` files.
 
-**Not implemented:** rate limits beyond login/register and pickup verification, broader schema-level request validation, and automated database-backed authorization tests. Helmet security headers are enabled. Login is limited to 10 attempts per IP per 15 minutes; registration to 5 per IP per hour; failed pickup-code verification is limited to 30 attempts per staff account per 15 minutes (successful collections do not count). Rate-limit counters use an in-memory store and reset on server restart. Auth uses an HttpOnly cookie and unsafe browser requests are checked against the configured origins. The planned single-origin Render setup avoids cross-site cookie restrictions. See [the route audit](./docs/SECURITY-ROUTE-AUDIT.md).
+**Not implemented:** rate limits beyond login/register and pickup verification, broader schema-level request validation, and automated database-backed authorization tests. Helmet security headers are enabled. Login is limited to 10 attempts per IP per 15 minutes; registration to 5 per IP per hour; failed pickup-code verification is limited to 30 attempts per staff account per 15 minutes (successful collections do not count). Rate-limit counters use an in-memory store and reset on server restart. Auth uses an HttpOnly cookie and unsafe browser requests are checked against configured origins. If client and API use different Vercel domains, verify cross-site cookie behavior; same-origin routing is preferable. See [the route audit](./docs/SECURITY-ROUTE-AUDIT.md).
 
 ---
 
@@ -637,12 +638,12 @@ The safe templates are `server/.env.example` and `client/.env.example`. Copy the
 |---|---|
 | `MONGO_URI` | Server; MongoDB connection |
 | `JWT_SECRET` | Server auth and Socket.IO token signing/verification |
-| `CLIENT_URL` | Optional comma-separated browser origins for local/separate-client hosting; Render automatically allows its own `RENDER_EXTERNAL_URL` |
+| `CLIENT_URL` | Server allowlist for the deployed client origin(s); comma-separated when needed |
 | `PORT` | Server listen port; defaults to 5001 |
 | `NODE_ENV` | Cookie security mode; use `development` locally, otherwise cookies default to Secure/SameSite=None |
-| `VITE_API_URL` | Local Vite development API URL only; production builds use same-origin `/api` and ignore this setting |
-| `CRON_SECRET` | Secret required by `GET /api/internal/no-show`; a trusted scheduler must send `Authorization: Bearer <secret>` |
-| `VERCEL_URL` | Supplied by Vercel; used for allowed-origin checks. Custom Vercel domains are checked against the request host |
+| `VITE_API_URL` | Optional client API base URL; set it to the deployed server's `/api` URL when the client and API use separate Vercel projects; leave unset when `/api` is routed on the same origin |
+| `CRON_SECRET` | Secret required by `GET /api/internal/no-show`; a trusted external scheduler must send it in the Authorization header |
+| `VERCEL_URL` | Supplied by Vercel; used for server-side origin checks |
 
 `server/.env` is loaded by Docker Compose and `dotenv`. Keep the Atlas URI and JWT secret in that ignored local file or a secrets manager; do not put them in the Dockerfiles, Compose file, or GitHub Actions.
 
@@ -671,8 +672,9 @@ canteen-app/
 │   ├── test/          Node built-in unit tests
 │   ├── server.js, socket.js, slots.js, noShow.js
 │   └── seed.js, migrate-multi-canteen.js, makeAdmin.js
-├── render.yaml
-└── vercel.json
+├── vercel.json
+├── client/vercel.json
+└── server/index.js
 ```
 
 ---
@@ -687,7 +689,7 @@ npm --prefix client run build
 npm --prefix client run lint
 ```
 
-The backend has dependency-light tests using Node's built-in test runner; they cover authorization helpers, origin checks, cron authentication, slots, report logic, and no-show/payment behavior without connecting to MongoDB. The client has no automated test script. Frontend lint currently reports existing React effect/state and Fast Refresh lint errors; CI reports the failure and does not skip it.
+The backend has 45 dependency-light tests using Node's built-in test runner; they cover authorization helpers, origin checks, cron authentication, slots, report logic, and no-show/payment behavior without connecting to MongoDB. The client has no automated test script. The frontend ESLint command and production build are configured in CI. Docker image builds are a separate packaging check; CI does not deploy to Vercel.
 
 Not yet covered by automated tests: real HTTP/API integration with a disposable database, end-to-end student/staff/admin flows, cart UI, and React component behavior. Do not point tests at the production Atlas database.
 
@@ -702,10 +704,10 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 | Docker says it cannot connect to the daemon | Docker Desktop/Engine is not running | Start Docker Desktop, wait for the engine, then rerun the Compose command |
 | `EADDRINUSE :::5001` | Old server still running | `lsof -i :5001`, then `kill <PID>` |
 | No `MongoDB connected` | Wrong URI or Atlas IP not allowed | Check `.env` and Atlas Network Access |
-| CORS error in browser | `CLIENT_URL` missing your separate client's origin, or local origin mismatch | Add the exact origin to `CLIENT_URL`; same-origin Render hosting uses `RENDER_EXTERNAL_URL` automatically |
-| `Not authorized, token missing` after login | API path is routed to the wrong service, or the browser did not send its HttpOnly cookie | Ensure `/api/*` rewrites to the Vercel `server` service and the client/server share one public origin; log in again after deployment |
+| CORS error in browser | `CLIENT_URL` does not allow the deployed frontend origin | Set the exact frontend origin in the Vercel server project's `CLIENT_URL` value and redeploy the server |
+| `Not authorized, token missing` after login | API URL/routing mismatch or the browser did not send its HttpOnly cookie | Check the client project's `VITE_API_URL` (include `/api`) or the same-origin `/api` rewrite, and confirm the API response sets the cookie |
 | No live Socket.IO updates on Vercel | Vercel deployment disables the persistent Socket.IO client | Dashboard and My Orders refresh through their 30-second polling fallback |
-| Automatic no-show job is not running on Vercel | Serverless functions do not keep the local node-cron process alive | Configure a trusted scheduler to request `/api/internal/no-show` every minute with `CRON_SECRET`; Vercel Hobby Cron is limited to once per day |
+| Automatic no-show job is not running on Vercel | Serverless functions do not keep the local node-cron process alive | Verify a trusted scheduler requests `/api/internal/no-show` every minute with `CRON_SECRET`; Vercel Hobby Cron is limited to once per day |
 | Socket error `Invalid token` | Not logged in or bad `JWT_SECRET` | Log in again, check env |
 | No beep | Sound not enabled | Click **Enable sound** once |
 | Blank page after edit | JSX syntax error (for example a duplicated `return (`) | Read the Vite terminal error |
@@ -715,11 +717,11 @@ To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test
 
 ## 21. Deployment
 
-**Current state: nothing is deployed.** The selected target is a Vercel multi-service project defined in `vercel.json`: `client` serves the Vite app, `/api/*` routes to the Express `server`, and all other paths route to the client. The services use one public origin for cookie authentication; no internal service binding is needed because browser API calls use the public rewrite. Configure `MONGO_URI`, `JWT_SECRET`, and `CRON_SECRET` privately for the server service. Vercel builds disable Socket.IO and rely on the existing 30-second polling. A trusted external scheduler must call `GET /api/internal/no-show` every minute with the configured bearer secret; Vercel Hobby Cron is limited to once per day, too infrequent for the current no-show rule. No Vercel deployment or live smoke test has been completed.
+**Deployment status:** the owner reports the app is deployed and working on Vercel. The repo contains a root multi-service config, a client SPA fallback, and client code that supports either same-origin `/api` or a separately configured `VITE_API_URL`. Do not change Vercel project roots, rewrites, or environment settings without checking the live Vercel project configuration first.
 
-The frontend lint check currently reports React effect/state lint errors. CI will report the failure rather than skipping the configured lint command.
+Vercel builds disable the persistent Socket.IO client; Dashboard and My Orders use the existing 30-second polling fallback. A Vercel function does not keep the local `node-cron` process alive. The backend exposes `GET /api/internal/no-show` protected by `CRON_SECRET`, but this repo cannot prove a trusted external scheduler is configured and calling it every minute. Verify that scheduler and cookie-based login at handover. Vercel deployment is automatic through its Git integration; GitHub Actions validates code and builds but does not deploy or publish images.
 
-To deploy, create the Vercel project from the repository root and `multi-canteen` branch so it reads the multi-service `vercel.json`; set the server environment variables privately and configure Atlas network access. Vercel supplies deployment URL variables. Verify `/api/health`, cookie login/refresh, student/staff/admin authorization, polling updates, the external no-show scheduler, and a test order before inviting users. The Render blueprint remains an alternative single-service deployment. Review backup restoration and resolve CI lint failures. The current Compose Dockerfiles are development configurations, not production images.
+Before handing the system to canteen staff, check `/api/health`, student/staff/admin login and authorization, order placement/collection/payment, polling updates, and no-show scheduling against the actual deployed setup. Verify Atlas backups and rollback access. Local tests and builds are not proof of those live checks.
 
 ---
 
@@ -729,10 +731,10 @@ To deploy, create the Vercel project from the repository root and `multi-canteen
 - Order submission uses a MongoDB transaction with per-user and per-canteen write locks; verify concurrent submissions against Atlas or a local replica set.
 - No-show order status, strike count, and blocking are updated in one MongoDB transaction.
 - Helmet security headers are enabled. Login/register have per-IP rate limits and failed pickup-code attempts have a per-staff rate limit; other routes have no rate limiting.
-- The frontend stores its auth JWT in an HttpOnly cookie; the selected single-origin Render setup avoids cross-site cookies. No service worker is included.
+- The frontend session uses an HttpOnly cookie. When client and API are separate projects, confirm the deployed domains and browser cookie behavior; same-origin routing is preferable. No service worker is included.
 - Frontend automated tests and database-backed API tests are not configured.
-- Real menu data, real-device tests, staff training, pilot, deployment, backup/restore rehearsal, and launch have not happened.
-- Root `.gitignore` is missing; service-specific `.gitignore` files currently ignore their local `.env` and `node_modules`.
+- The owner reports Vercel deployment and working flows; live health/login checks were not independently run from this workspace. Real-device tests, staff training, pilot, and backup/restore rehearsal still need confirmation.
+- Verify the actual configured no-show scheduler and Vercel project environment settings before handover. Never commit `.env` files.
 
 **Planned**
 | Day | Feature |
@@ -742,8 +744,8 @@ To deploy, create the Vercel project from the repository root and `multi-canteen
 | 23 | Basic responsive/touch styles are present; real 360px device review is **not done**. |
 | 24 | Test plan is written; real-phone and three-role testing is **not done**. |
 | 25-27 | Staff guide and pilot plan are written; real menu entry, training, pilot, and feedback are **not done**. |
-| 28-29 | Single-service Render blueprint exists; provider setup, deployment, Atlas integration, and live Socket.IO testing are **not done**. |
-| 30 | Go-live checklist exists; backup/rollback rehearsal and launch are **not done**. |
+| 28-29 | Vercel deployment is reported working by the owner; independent production smoke checks and no-show scheduler verification remain. |
+| 30 | Handover checklist exists; real-phone, staff, pilot, backup/restore, and rollback checks need explicit confirmation. |
 
 These are code/configuration and preparation documents, not evidence that the app has been tested with CampusBites or deployed.
 
@@ -812,12 +814,12 @@ Screenshots are not included yet. Add screenshots only after testing with safe t
 
 **Skills shown:** REST API design, MongoDB modelling, JWT auth and role/ownership checks, atomic counters, WebSockets (Socket.IO rooms), React hooks and context, Git branching.
 
-**Implementation status:** The code/configuration for Days 19–23 is present, and preparation materials exist for later days. Real-database end-to-end testing, real-phone testing, CampusBites onboarding, pilot, deployment, and launch are not done; see [Limitations and Roadmap](#22-limitations-and-roadmap).
+**Implementation status:** Days 19–23 features are in the code. The owner reports the app is deployed on Vercel; real-device testing, staff training, pilot, backup/restore, and launch checks remain to be confirmed. See [Limitations and Roadmap](#22-limitations-and-roadmap).
 
 **Contributing**
 1. Create a branch: `git checkout -b feature/your-change`.
 2. Make a small change, test it manually with at least two roles.
-3. Commit with a clear message, push, and open a pull request against `multi-canteen`.
+3. Commit with a clear message, push, and open a pull request against `main` after review.
 4. Never commit `.env` or real user data.
 
 **License:** no license file has been identified in the repository.

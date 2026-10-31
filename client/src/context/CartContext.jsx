@@ -35,6 +35,7 @@ export function CartProvider({ children }) {
 
   // an empty cart belongs to no canteen
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale canteen after the last cart item is removed
     if (items.length === 0 && canteen) setCanteen(null);
   }, [items, canteen]);
 

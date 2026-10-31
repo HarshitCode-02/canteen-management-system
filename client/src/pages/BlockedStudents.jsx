@@ -27,6 +27,7 @@ export default function BlockedStudents() {
   }, [canteenId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- avoid displaying another canteen's blocked users while reloading
     setStudents([]);
     setLoading(true);
     load();

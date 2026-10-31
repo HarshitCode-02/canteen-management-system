@@ -47,6 +47,8 @@ jobs:
 
       - name: Build frontend
         run: npm --prefix client run build
+        env:
+          VERCEL: "1"
 
       - name: Lint frontend
         run: npm --prefix client run lint
@@ -58,8 +60,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Build backend image
+      - name: Build backend development image
         run: docker build --tag canteen-server:ci ./server
 
-      - name: Build frontend image
+      - name: Build frontend development image
         run: docker build --tag canteen-client:ci ./client

@@ -1,10 +1,11 @@
 # API access and ownership audit
 
-Reviewed against the route middleware and controller checks in the current `multi-canteen` workspace. Recheck this list whenever routes or controllers change.
+Reviewed against the route middleware and controller checks in the repository. Recheck this list whenever routes or controllers change. This source audit does not verify the live Vercel settings.
 
 | Route group | Allowed callers | Ownership/data scope |
 |---|---|---|
 | `GET /api/health` | Public | Reports API/database readiness; no records returned |
+| `GET /api/internal/no-show` | Trusted scheduler | `cronAuth` requires the configured secret before running overdue-order processing |
 | `POST /api/auth/register` | Public, 5 attempts/IP/hour | Registration assigns the default student role; role is not accepted from the client |
 | `POST /api/auth/login` | Public, 10 attempts/IP/15 minutes | Generic invalid-credentials response; excess attempts receive 429 |
 | `POST /api/auth/logout` | Public with allowed Origin | Clears the HttpOnly session cookie |
@@ -22,8 +23,8 @@ Reviewed against the route middleware and controller checks in the current `mult
 ## Still required
 
 - Helmet security headers are enabled. Login/register are limited per IP, and failed pickup-code verification is limited to 30 attempts per authenticated staff account per 15 minutes; successful collections do not count. The in-memory limits reset on server restart. Throttling for other routes remains pending.
-- Unsafe HTTP methods require an allowed `Origin`; single-origin Render hosting uses `RENDER_EXTERNAL_URL` automatically, but deployed cookie and Socket.IO behavior still needs browser verification.
+- Unsafe HTTP methods require an allowed `Origin`; Vercel deployment hostnames and same-origin requests are supported. Verify the actual `CLIENT_URL`, cookie behavior, and API/client domains in Vercel before handover.
 - Order capacity and no-show/block changes now use MongoDB transactions. Concurrent behavior still needs database-backed verification against Atlas or a local replica set.
 - Add automated API tests for unauthorized roles, cross-canteen access, order transitions, report output, password changes, and invalid input.
-- Test production CORS, HTTPS, proxy/WebSocket behavior, Atlas access restrictions, and secret configuration in the hosting dashboards.
+- Test production CORS, HTTPS, client/API cookie behavior, Atlas access restrictions, external no-show scheduler, and private secret configuration in Vercel.
 - This code review is not a substitute for penetration testing or a production security certification.
