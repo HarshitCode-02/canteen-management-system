@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { errorMessage } from "../api";
 
 const EXAMPLES = [
@@ -13,6 +13,12 @@ export default function CanteenAssistant() {
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const messagesRef = useRef(null);
+
+  useEffect(() => {
+    const conversation = messagesRef.current;
+    if (conversation) conversation.scrollTop = conversation.scrollHeight;
+  }, [messages, loading]);
 
   const ask = async (event) => {
     event.preventDefault();
@@ -42,59 +48,72 @@ export default function CanteenAssistant() {
     <section className="smart-panel">
       <h2>Canteen assistant</h2>
       <p className="muted">Answers come from current menus and your own active order; no external AI service is used.</p>
-      <div className="assistant-examples" aria-label="Example questions">
-        {EXAMPLES.map((example) => (
-          <button type="button" className="small" key={example} onClick={() => setInput(example)}>
-            {example}
-          </button>
-        ))}
-      </div>
-      <div className="assistant-messages" aria-live="polite">
-        {messages.length === 0 && <p className="muted">Ask about food, availability, a budget, or your order.</p>}
-        {messages.map((message, index) => (
-          <article className={`assistant-message ${message.role}`} key={`${index}-${message.role}`}>
-            <b>{message.role === "user" ? "You" : "CampusBites"}</b>
-            <p>{message.text}</p>
-            {message.items.length > 0 && (
-              <ul>
-                {message.items.map((item) => (
-                  <li key={item._id}>
-                    {item.name} · ₹{item.price} · {item.canteen?.name || "Canteen"}
-                    {item.isAvailable === false ? " · Sold out" : ""}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {message.suggestions.map((suggestion, suggestionIndex) => (
-              <div className="assistant-suggestion" key={`${suggestion.canteen.id}-${suggestionIndex}`}>
-                <b>{suggestion.canteen.name} · ₹{suggestion.total}</b>
-                <span>{suggestion.items.map((item) => item.name).join(" + ")}</span>
-              </div>
-            ))}
-            {message.canteens.length > 0 && (
-              <ul>
-                {message.canteens.map((canteen) => (
-                  <li key={canteen._id}>{canteen.name} · {canteen.isOpen ? "Open" : "Closed"}</li>
-                ))}
-              </ul>
-            )}
-          </article>
-        ))}
-        {loading && <p role="status">Checking current data...</p>}
+      <section className="assistant-question-section" aria-labelledby="assistant-examples-title">
+        <h3 id="assistant-examples-title">Your questions</h3>
+        <div className="assistant-examples">
+          {EXAMPLES.map((example) => (
+            <button type="button" className="assistant-chip" key={example} onClick={() => {
+              setInput(example);
+              setError("");
+            }}>
+              {example}
+            </button>
+          ))}
+        </div>
+      </section>
+      <div className="assistant-conversation">
+        <div className="assistant-messages" aria-live="polite" aria-relevant="additions text" ref={messagesRef}>
+          {messages.length === 0 && <p className="muted assistant-empty">Ask about food, availability, a budget, or your order.</p>}
+          {messages.map((message, index) => (
+            <article className={`assistant-message ${message.role}`} key={`${index}-${message.role}`}>
+              <b>{message.role === "user" ? "You" : "CampusBites"}</b>
+              <p>{message.text}</p>
+              {message.items?.length > 0 && (
+                <ul>
+                  {message.items.map((item) => (
+                    <li key={item._id}>
+                      {item.name} · ₹{item.price} · {item.canteen?.name || "Canteen"}
+                      {item.isAvailable === false ? " · Sold out" : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {message.suggestions?.map((suggestion, suggestionIndex) => (
+                <div className="assistant-suggestion" key={`${suggestion.canteen.id}-${suggestionIndex}`}>
+                  <b>{suggestion.canteen.name} · ₹{suggestion.total}</b>
+                  <span>{suggestion.items.map((item) => item.name).join(" + ")}</span>
+                </div>
+              ))}
+              {message.canteens?.length > 0 && (
+                <ul>
+                  {message.canteens.map((canteen) => (
+                    <li key={canteen._id}>{canteen.name} · {canteen.isOpen ? "Open" : "Closed"}</li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          ))}
+          {loading && <p className="assistant-loading" role="status">Checking current data...</p>}
+        </div>
       </div>
       <form className="assistant-form" onSubmit={ask}>
-        <label className="field">
-          Your question
-          <input
-            maxLength={300}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            aria-label="Ask the canteen assistant"
-          />
-        </label>
-        <button type="submit" disabled={loading || !input.trim()}>Ask</button>
+        <label className="assistant-field-label" htmlFor="assistant-question">Your question</label>
+        <input
+          id="assistant-question"
+          type="text"
+          maxLength={300}
+          value={input}
+          onChange={(event) => {
+            setInput(event.target.value);
+            if (error) setError("");
+          }}
+          placeholder="Ask about the menu, prices, or your order..."
+          aria-describedby="assistant-question-help"
+        />
+        <button type="submit" disabled={loading || !input.trim()}>{loading ? "Asking..." : "Ask"}</button>
+        <span id="assistant-question-help" className="muted assistant-field-help">Up to 300 characters</span>
       </form>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error assistant-error" role="alert">{error}</p>}
     </section>
   );
 }
