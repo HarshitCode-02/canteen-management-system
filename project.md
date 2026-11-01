@@ -62,7 +62,7 @@ npm --prefix client run build
 npm --prefix client test
 ```
 
-Most recent local verification: client lint/build and all 4 client tests passed; the focused backend error/logo/assistant suites passed 11 tests. The full backend run passed 69 of 75 tests; 6 HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. Backend unit tests are dependency-light and do not connect to production MongoDB. Full npm audits report moderate issues in development tooling; production-only audits report zero vulnerabilities. CI also checks backend JavaScript syntax and builds development Docker images; it does not publish images or deploy. A green local build is not proof of live production behavior.
+Most recent local verification: client lint/build and all 4 client tests passed; the focused backend error/logo/assistant suites passed 11 tests. The full backend run passed 69 of 75 tests; 6 HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. GitHub Actions run 23 for commit `ddb58d8` passed the full test/build validation and both Docker image jobs. Backend unit tests are dependency-light and do not connect to production MongoDB. Full npm audits report moderate issues in development tooling; production-only audits report zero vulnerabilities. CI does not publish images or deploy. A green CI run is not proof of live production behavior.
 
 ## Handover priorities
 

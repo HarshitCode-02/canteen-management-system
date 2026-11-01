@@ -95,6 +95,7 @@ Backend tests are unit/controller tests with stubs; they do not connect to Mongo
 | `npm --prefix client test` | 4 passed |
 | Focused server error/logo/assistant suites | 11 passed |
 | `npm --prefix server test` | 69 passed; 6 HTTP-listener tests were blocked because the sandbox denied binding to `0.0.0.0` (`EPERM`) |
+| GitHub Actions CI for commit `ddb58d8` | Passed all validation and Docker image jobs ([run 23](https://github.com/HarshitCode-02/canteen-management-system/actions/runs/41282138320)) |
 
 These are local code checks only. Browser viewport, PWA installation, production API connectivity, and real-device behavior were not verified.
 
