@@ -62,7 +62,7 @@ npm --prefix client run build
 npm --prefix client test
 ```
 
-Latest local verification for the current handover changes: client lint passed, all 4 client tests passed, and the production client build passed; 13 focused backend tests for no-show review/correction, image URL validation, and search query handling passed, and all backend JavaScript passed `node --check`. The most recent full backend run reported 76/82 passing; six HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. These changes have not yet received a GitHub Actions run. Backend unit tests do not connect to production MongoDB. CI does not publish images or deploy, and a green CI run is not proof of live production behavior.
+Latest local verification for the current handover changes: client lint passed, all 4 client tests passed, and the production client build passed; 13 focused backend tests for no-show review/correction, image URL validation, and search query handling passed, and all backend JavaScript passed `node --check`. The most recent full backend run reported 76/82 passing; six HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. GitHub Actions run 25 for commit `0456b41` passed the full lint/test/build workflow and both Docker image builds. Backend unit tests do not connect to production MongoDB. CI does not publish images or deploy, and a green CI run is not proof of live production behavior.
 
 ## Handover priorities
 
