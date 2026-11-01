@@ -10,6 +10,9 @@ const SAFE_DETAILS = new Set([
   "isOpen",
   "isActive",
   "role",
+  "decision",
+  "reasonProvided",
+  "orderCount",
   "canteenCount",
   "isVisible",
 ]);

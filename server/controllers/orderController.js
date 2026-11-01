@@ -9,10 +9,11 @@ const FINAL = ["collected", "cancelled", "no_show"];
 const STATUSES = [...ACTIVE, ...FINAL];
 const Canteen = require("../models/Canteen");
 const crypto = require("crypto");
-const { notifyOrder } = require("../socket");
+const { notifyOrder, emitToUser } = require("../socket");
 const { countInSlot } = require("../slots");
 const { markNoShow } = require("../noShow");
 const { writeAudit } = require("../services/auditLog");
+const NoShowReview = require("../models/NoShowReview");
 
 const MAX_ORDER_LINES = 20;
 const MAX_ITEM_QUANTITY = 20;
@@ -37,7 +38,7 @@ const orderResponse = (order) => {
 const ALLOWED = {
   placed: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
-  ready: ["no_show"],
+  ready: ["no_show", "cancelled"],
 };
 
 // never send the code or attempt counter to staff
@@ -47,6 +48,8 @@ const publicOrder = (order) => {
   delete obj.codeAttempts;
   delete obj.pickupQrHash;
   delete obj.pickupQrExpiresAt;
+  delete obj.resolutionReason;
+  delete obj.resolvedBy;
   return obj;
 };
 
@@ -85,7 +88,7 @@ exports.createOrder = async (req, res, next) => {
     }
 
     if (req.user.isBlocked) {
-      return res.status(403).json({ message: "You are blocked because of a no-show. Pay the full no-show order amount at the canteen counter and ask staff to record the payment and unblock you." });
+      return res.status(403).json({ message: "You are blocked after a no-show. Visit the canteen to explain what happened and request a staff review. Pay any outstanding no-show order amount at the counter; staff must record payment before approving an unblock." });
     }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "items must be a non-empty array" });
@@ -171,7 +174,7 @@ exports.createOrder = async (req, res, next) => {
         if (!user) {
           throw new OrderRequestError(
             403,
-            "You are blocked because of a no-show. Pay the full no-show order amount at the canteen counter and ask staff to record the payment and unblock you."
+            "You are blocked after a no-show. Visit the canteen to explain what happened and request a staff review. Pay any outstanding no-show order amount at the counter; staff must record payment before approving an unblock."
           );
         }
 
@@ -309,6 +312,8 @@ exports.getMyOrders = async (req, res, next) => {
     const result = orders.map((o) => {
       const obj = o.toObject();
       if (!ACTIVE.includes(o.status)) delete obj.pickupCode;
+      delete obj.resolutionReason;
+      delete obj.resolvedBy;
       return obj;
     });
     res.json(result);
@@ -605,6 +610,121 @@ exports.updateStatus = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+// PATCH /api/orders/:id/review-no-show (staff/admin corrects an erroneous no-show)
+exports.resolveNoShow = async (req, res, next) => {
+  const { explanation, correctedStatus } = req.body || {};
+  const reason = typeof explanation === "string" ? explanation.trim() : "";
+  if (reason.length < 10 || reason.length > 500) {
+    return res.status(400).json({ message: "Record the review explanation (10–500 characters)" });
+  }
+  if (!["collected", "cancelled"].includes(correctedStatus)) {
+    return res.status(400).json({ message: "correctedStatus must be collected or cancelled" });
+  }
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: "Invalid order id" });
+  }
+
+  const session = await mongoose.startSession();
+  let corrected;
+  let unblockedUser;
+  try {
+    await session.withTransaction(async () => {
+      const current = await Order.findById(req.params.id).session(session);
+      if (!current) {
+        const error = new Error("Order not found");
+        error.status = 404;
+        throw error;
+      }
+      if (!canManageCanteen(req.user, current.canteen)) {
+        const error = new Error("This order belongs to another canteen");
+        error.status = 403;
+        throw error;
+      }
+      if (current.status !== "no_show") {
+        const error = new Error("Only a no-show order can be corrected");
+        error.status = 409;
+        throw error;
+      }
+
+      corrected = await Order.findOneAndUpdate(
+        { _id: current._id, status: "no_show" },
+        {
+          $set: {
+            status: correctedStatus,
+            resolvedStatus: correctedStatus,
+            resolutionReason: reason,
+            resolvedBy: req.user._id,
+            resolvedAt: new Date(),
+            ...(correctedStatus === "collected"
+              ? { collectedAt: new Date(), collectedBy: req.user._id }
+              : {}),
+          },
+        },
+        { new: true, runValidators: true, session }
+      );
+      if (!corrected) {
+        const error = new Error("Order status changed; refresh and try again");
+        error.status = 409;
+        throw error;
+      }
+
+      const student = await User.findById(current.user).session(session);
+      if (student) {
+        const previousCount = Math.max(0, student.noShowCount || 0);
+        student.noShowCount = Math.max(0, previousCount - 1);
+        if (previousCount === 1 && student.isBlocked) {
+          student.isBlocked = false;
+          student.blockedAt = undefined;
+          unblockedUser = student;
+        }
+        await student.save({ session });
+      }
+
+      await NoShowReview.create([{
+        user: current.user,
+        canteen: current.canteen,
+        order: current._id,
+        reviewedBy: req.user._id,
+        explanation: reason,
+        decision: "order_corrected",
+        correctedStatus,
+      }], { session });
+      await writeAudit(req, {
+        eventType: "order.no_show_corrected",
+        entityType: "order",
+        entityId: current._id,
+        canteen: current.canteen,
+        details: { fromStatus: "no_show", toStatus: correctedStatus, reasonProvided: true },
+      }, session);
+      await writeAudit(req, {
+        eventType: "user.reviewed",
+        entityType: "user",
+        entityId: current.user,
+        canteen: current.canteen,
+        details: { decision: "order_corrected", reasonProvided: true },
+      }, session);
+      if (unblockedUser) {
+        await writeAudit(req, {
+          eventType: "user.unblocked",
+          entityType: "user",
+          entityId: unblockedUser._id,
+          canteen: current.canteen,
+          details: { decision: "order_corrected", reasonProvided: true },
+        }, session);
+      }
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    return next(err);
+  } finally {
+    await session.endSession();
+  }
+
+  notifyOrder(corrected);
+  if (unblockedUser) emitToUser(unblockedUser._id, "accountUpdated", { isBlocked: false });
+  res.json(publicOrder(corrected));
 };
 
 // PATCH /api/orders/:id/cancel  (owner only, only while "placed")

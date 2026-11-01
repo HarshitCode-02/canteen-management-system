@@ -10,7 +10,7 @@ const STATUS_MESSAGES = {
   ready: "is ready for pickup",
   cancelled: "was cancelled",
   collected: "was collected",
-  no_show: "was marked as a no-show",
+  no_show: "was marked as not collected. Visit the canteen to explain what happened and request a staff review",
 };
 
 export default function OrderStatusNotifications() {

@@ -101,7 +101,7 @@ export default function Footer() {
 
           <section className="footer-contact" aria-labelledby="footer-contact-title">
             <h2 id="footer-contact-title">Contact Us</h2>
-            <p>Have a question or need help with CampusBites? We'd love to hear from you.</p>
+            <p>Have a question or need help with CampusBites? We're happy to hear from you.</p>
             <a className="footer-email" href={contactHref}>
               <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
                 <path d="M3 5h18v14H3zM3 6l9 7 9-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />

@@ -60,4 +60,8 @@ export const errorMessages = {
     fallback: "We couldn't load reviews right now. Please try again.",
     network: "We couldn't load reviews right now. Please try again.",
   },
+  search: {
+    fallback: "Search is temporarily unavailable. Please try again.",
+    network: "Search is temporarily unavailable. Please try again.",
+  },
 };

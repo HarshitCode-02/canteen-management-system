@@ -10,6 +10,7 @@ const {
   createPickupQr,
   verifyPickupQr,
   confirmPayment,runningLate,
+  resolveNoShow,
 } = require("../controllers/orderController");
 const { protect, authorize } = require("../middleware/auth");
 const { pickupVerifyLimiter } = require("../middleware/authRateLimit");
@@ -25,6 +26,7 @@ router.get("/", authorize("canteen", "admin"), getActiveOrders);
 router.post("/verify-qr", authorize("canteen", "admin"), pickupVerifyLimiter, verifyPickupQr);
 router.post("/:id/pickup-qr", createPickupQr);
 router.patch("/:id/status", authorize("canteen", "admin"), updateStatus);
+router.patch("/:id/review-no-show", authorize("canteen", "admin"), resolveNoShow);
 router.patch("/:id/cancel", cancelOrder);
 router.patch("/:id/late", runningLate);
 router.patch("/:id/verify", authorize("canteen", "admin"), pickupVerifyLimiter, verifyAndCollect);

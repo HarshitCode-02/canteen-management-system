@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import api, { errorMessage } from "../api";
 import useStaffCanteen from "../useStaffCanteen";
 import CanteenSwitcher from "../components/CanteenSwitcher";
+import FoodItemImage from "../components/FoodItemImage";
 
 const EMPTY_FORM = { name: "", price: "", category: "", prepTimeMins: 10, image: "" };
 
 export default function ManageMenu() {
   const [menu, setMenu] = useState([]);
   const [drafts, setDrafts] = useState({}); // id -> price being typed
+  const [imageDrafts, setImageDrafts] = useState({});
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,7 @@ export default function ManageMenu() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- clear previous canteen items before loading the selected canteen
     setMenu([]);
     setDrafts({});
+    setImageDrafts({});
     setLoading(true);
     load();
   }, [load]);
@@ -68,6 +71,22 @@ export default function ManageMenu() {
         const copy = { ...d };
         delete copy[item._id];
         return copy;
+      });
+    }
+  };
+
+  const saveImage = async (item) => {
+    const image = (imageDrafts[item._id] ?? item.image ?? "").trim();
+    if (image && !/^https?:\/\/\S+$/i.test(image)) {
+      setError("Enter a valid HTTP or HTTPS image URL, or clear the field.");
+      return;
+    }
+    const ok = await patchItem(item, { image });
+    if (ok) {
+      setImageDrafts((current) => {
+        const next = { ...current };
+        delete next[item._id];
+        return next;
       });
     }
   };
@@ -187,6 +206,7 @@ export default function ManageMenu() {
             return (
               <div key={m._id} className={`menu-item ${m.isAvailable ? "" : "soldout"}`}>
                 <div>
+                  <FoodItemImage key={m.image || m._id} src={m.image} alt={m.name} className="menu-img" />
                   <h3>{m.name}</h3>
                   <p className="muted">{m.category} · ~{m.prepTimeMins} min</p>
                   <label className="field">
@@ -198,12 +218,24 @@ export default function ManageMenu() {
                       onChange={(e) => setDrafts({ ...drafts, [m._id]: e.target.value })}
                     />
                   </label>
+                  <label className="field">
+                    Image URL (optional)
+                    <input
+                      type="url"
+                      value={imageDrafts[m._id] ?? m.image ?? ""}
+                      placeholder="https://..."
+                      onChange={(event) => setImageDrafts((current) => ({ ...current, [m._id]: event.target.value }))}
+                    />
+                  </label>
                 </div>
                 <div className="dash-actions">
                   {editing && (
                     <button className="small" disabled={busy} onClick={() => savePrice(m)}>
                       Save price
                     </button>
+                  )}
+                  {imageDrafts[m._id] !== undefined && imageDrafts[m._id].trim() !== (m.image || "") && (
+                    <button className="small" disabled={busy} onClick={() => saveImage(m)}>Save image</button>
                   )}
                   <button className="small" disabled={busy} onClick={() => toggleSpecial(m)}>
                     {m.isSpecial ? "Remove special" : "Today's special"}

@@ -21,6 +21,8 @@ const auditLogSchema = new mongoose.Schema({
       "staff.canteens_changed",
       "user.unblocked",
       "user.blocked",
+      "user.reviewed",
+      "order.no_show_corrected",
       "user.password_reset",
       "review.moderated",
     ],

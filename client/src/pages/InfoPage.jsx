@@ -67,7 +67,7 @@ const PAGES = {
         <h2>No online payment checkout</h2>
         <p>CampusBites does not currently collect card, UPI, or other online payments. Do not send payment details through the support email.</p>
         <h2>No-show orders</h2>
-        <p>If an order is marked as a no-show, the app may block further ordering until the full order amount is paid at the canteen counter and staff records that payment and unblocks the account.</p>
+        <p>A no-show blocks new ordering. Visit the relevant canteen to explain what happened and request a staff review. Any outstanding no-show order amount must be paid at the counter and recorded before staff can approve an unblock. Staff can correct an erroneous no-show caused by a canteen or verified system error; that decision is recorded.</p>
         <p>If an order's payment status looks incorrect, contact support at <a href="mailto:campusbites034@gmail.com?subject=CampusBites%20Payment%20Question">campusbites034@gmail.com</a> and include the order number. Do not include passwords or payment credentials.</p>
       </>
     ),
@@ -110,7 +110,7 @@ const PAGES = {
         <h2>Menus and orders</h2>
         <p>Menu availability, canteen opening status, and pickup slots can change. An order is placed only after CampusBites confirms it. Check My Orders for the current status. You may cancel your own order only while its status remains placed.</p>
         <h2>Pickup and payment</h2>
-        <p>Collect a ready order from its canteen and pay the displayed total at the counter. CampusBites does not currently process online payments. A no-show may result in an ordering block until counter payment is recorded and staff unblocks the account.</p>
+        <p>Collect a ready order from its canteen and pay the displayed total at the counter. CampusBites does not currently process online payments. A no-show blocks ordering; students should visit the canteen to explain what happened and request a staff review. Outstanding no-show payments must be recorded before staff approve an unblock. Staff can correct an erroneous canteen/system no-show, with the correction audited.</p>
         <h2>Questions</h2>
         <p>For help with an account or order, email <a href="mailto:campusbites034@gmail.com?subject=CampusBites%20Support%20Request">campusbites034@gmail.com</a>. These terms describe the app's current behavior and do not claim an institutional affiliation or create a refund or data-retention policy.</p>
       </>

@@ -4,6 +4,7 @@ const {
   assignCanteens,
   getAdminOverview,
   unblockUser,
+  reviewBlockedUser,
   resetStaffPassword,
   resetUserPassword,
 } = require("../controllers/adminController");
@@ -18,6 +19,7 @@ router.get("/overview", getAdminOverview);
 router.post("/staff", createStaff);
 router.patch("/users/:id/canteens", assignCanteens);
 router.patch("/users/:id/unblock", unblockUser);
+router.patch("/users/:id/review", reviewBlockedUser);
 router.patch("/users/password", resetUserPassword);
 router.patch("/users/:id/password", resetStaffPassword);
 router.get("/reviews", listAdminReviews);

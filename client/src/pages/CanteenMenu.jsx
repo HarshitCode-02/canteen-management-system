@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import api, { errorMessage, errorMessages } from "../api";
 import { useCart } from "../context/CartContext";
 import MenuItemReviews from "../components/MenuItemReviews";
+import FoodItemImage from "../components/FoodItemImage";
 
 export default function CanteenMenu() {
   const { id } = useParams();
@@ -137,16 +138,8 @@ export default function CanteenMenu() {
                 const qty = qtyInCart(m._id);
                 return (
                   <div key={m._id} className={`menu-item ${m.isAvailable ? "" : "soldout"}`}>
-                    <div>
-                      {m.image && (
-                        <img
-                          src={m.image}
-                          alt={m.name}
-                          className="menu-img"
-                          loading="lazy"
-                          onError={(e) => { e.currentTarget.style.display = "none"; }}
-                        />
-                      )}
+                  <div>
+                    <FoodItemImage key={m.image || m._id} src={m.image} alt={m.name} className="menu-img" />
 
                       <h3>{m.name}</h3>
                       {(m.isSpecial || m.isPopular) && (

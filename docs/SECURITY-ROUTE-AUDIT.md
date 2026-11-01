@@ -12,17 +12,19 @@ Reviewed against the route middleware and controller checks in the repository. R
 | `GET /api/auth/me`, `PATCH /api/auth/me`, `PATCH /api/auth/password` | Authenticated user | User record comes from the HttpOnly-cookie JWT; profile update only writes allowlisted fields; password changes verify the current password |
 | `GET /api/canteens`, `GET /api/canteens/:id`, `GET /api/canteens/:id/menu`, `GET /api/canteens/:id/slots` | Public | Active canteens/menu/slot counts only where the controller filters active records; no private user data |
 | `POST /api/canteens`, `PATCH /api/canteens/:id` | Admin | Admin-only middleware; IDs validated in update |
-| `PATCH /api/canteens/:id/open`, `GET /api/canteens/:id/blocked`, `PATCH /api/canteens/:id/unblock/:userId` | Canteen staff/admin | Role middleware plus `canManageCanteen` check for the target canteen |
+| `PATCH /api/canteens/:id/open`, `GET /api/canteens/:id/blocked`, `PATCH /api/canteens/:id/unblock/:userId`, `PATCH /api/canteens/:id/review/:userId` | Canteen staff/admin | Role middleware plus `canManageCanteen` check; review requires an explanation and audits decisions |
 | `GET /api/menu` | Public | Menu is public; optional canteen query ID is validated |
 | `POST /api/menu`, `PATCH /api/menu/:id`, `DELETE /api/menu/:id` | Canteen staff/admin | Role middleware plus assigned-canteen ownership checks |
 | `POST /api/orders`, `GET /api/orders/my`, `PATCH /api/orders/:id/cancel`, `PATCH /api/orders/:id/late` | Authenticated user | Create uses the JWT user; list is filtered to the JWT user; cancel/late mutations verify order ownership |
 | `GET /api/orders`, `GET /api/orders/report`, status/verify/payment mutations | Canteen staff/admin | Role middleware; requested canteen or order is checked with `canManageCanteen` |
+| `PATCH /api/orders/:id/review-no-show` | Canteen staff/admin | Protected order route plus canteen ownership; correction requires an explanation and is audited |
 | `POST /api/orders/:id/pickup-qr` | Authenticated user | Query is scoped to the JWT owner and ready status; QR token is returned once and only its hash/expiry are stored |
 | `POST /api/orders/verify-qr` | Canteen staff/admin | Pickup limiter plus order-canteen ownership check; status-qualified atomic collection consumes the token |
 | `GET /api/reviews/menu/:menuItemId` | Public | Only visible reviews; menu item ID and page are validated |
 | `GET /api/reviews/my`, `POST /api/reviews` | Student/teacher | Submission uses JWT user and requires an owned collected order containing the menu item; unique order/item/user index prevents duplicates |
 | `/api/smart/*` | Student/teacher | `router.use(protect, authorize("student", "teacher"))`; assistant order lookup is scoped to the JWT user; recommendation inputs/search are bounded |
-| `/api/admin/*` | Admin | `router.use(protect, authorize("admin"))` covers every admin route, including review moderation and filtered/paginated audit reads |
+| `GET /api/search` | Any authenticated role | Protected route; only active canteens and available menu items are returned |
+| `/api/admin/*` | Admin | `router.use(protect, authorize("admin"))` covers every admin route, including explanation-required blocked-account review, review moderation, and filtered/paginated audit reads |
 | Audit event writes | Server-side mutation controllers | Actor comes from `req.user`; event details use a fixed allowlist and exclude credentials, pickup codes, QR tokens, and review text |
 | Socket.IO user/canteen rooms | Authenticated socket | Handshake Origin must be configured or exact same-origin; cookie JWT verified; canteen room join validates ObjectId and `canManageCanteen`; payload excludes pickup codes and QR tokens |
 

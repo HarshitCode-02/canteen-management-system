@@ -18,6 +18,7 @@ import Discover from "./pages/Discover";
 import ReviewModeration from "./pages/ReviewModeration";
 import AdminAuditLogs from "./pages/AdminAuditLogs";
 import InfoPage from "./pages/InfoPage";
+import SearchPage from "./pages/SearchPage";
 
 
 
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/canteens" element={<CanteenList />} />
         <Route path="/canteen/:id" element={<CanteenMenu />} />
         <Route path="/cart" element={<Cart />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/orders" element={<MyOrders />} />
         <Route path="/account" element={<AccountSettings />} />
         <Route

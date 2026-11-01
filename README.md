@@ -97,9 +97,9 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 4. Open **Cart**, choose a **pickup time**, and place the order. You can only have **one active order** at a time.
 5. Go to **My Orders**. You see your order number (like `A7`), its status, and a **4-digit pickup code** while the order is active. When it is ready, you can also generate a short-lived pickup QR.
 6. You can **cancel** your own order only while its status is "placed".
-7. When status becomes **Ready**, show the QR or tell the staff the four-digit code, then pay cash/UPI at the counter.
+7. Use **Search** beside the cart to find food, active canteens, and pages. When status becomes **Ready**, show the QR or tell staff the four-digit code, then pay cash/UPI at the counter.
 8. After collecting an item, you can leave one verified review for it from My Orders.
-9. A ready order not collected within the allowed time is marked no-show and blocks the account. Pay the full no-show order amount at that canteen's counter; staff record the payment and unblock the account.
+9. A ready order not collected within the allowed time is marked no-show and blocks the account. Visit the canteen to explain what happened and request a staff review. Staff must record any outstanding no-show payments before approving an unblock; a verified canteen/system error can be corrected and is audited.
 10. Use **Discover** for budget suggestions, canteen comparisons, and deterministic menu/order help. Optionally enable order-ready notifications.
 
 ### As canteen staff
@@ -110,7 +110,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 5. If a collected order was not paid yet, press **Confirm payment** later.
 6. Use **Cancel** (placed/preparing orders) or **No-show** (ready orders) when needed. The first no-show blocks the student immediately.
 7. Open **Manage Menu** to add, edit, delete items, mark items sold out, and set today's special.
-8. Open **Blocked** to record payment received at the counter for each no-show order, then unblock the student.
+8. Open **Blocked** to review the student's explanation and order history. Record counter payments, then choose to keep the account blocked or approve an unblock. Correct an erroneous canteen/system no-show to **collected** or **cancelled** with a recorded explanation.
 9. Open **Sales Report** for order/payment totals, best sellers, and busy pickup hours.
 
 ### As admin
@@ -128,7 +128,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Register / login | Password hashed with bcrypt; the signed JWT is set in an HttpOnly cookie | `authController`, `Login.jsx`, `Register.jsx`, `AuthContext.jsx` |
 | Browse canteens | `GET /api/canteens` returns only active canteens | `CanteenList.jsx` |
 | Browse a canteen menu | `GET /api/canteens/:id/menu` returns canteen and items | `CanteenMenu.jsx` |
-| Cart for one canteen | Cart saved in browser (`localStorage` keys `cart`, `cartCanteen`); switching canteen prompts | `CartContext.jsx`, `Cart.jsx` |
+| Cart for one canteen | Cart saved in browser (`localStorage` keys `cart`, `cartCanteen`); switching canteen prompts; collection/no-show reminder appears before checkout | `CartContext.jsx`, `Cart.jsx` |
 | Place order | Server re-reads prices from the DB, creates order and pickup code | `orderController.createOrder` |
 | Order number | `A1, A2...` per canteen per day (India time), using an atomic counter | `nextOrderNumber`, `Counter` model |
 | See pickup code | Returned only for active orders and only to the owner | `getMyOrders`, `MyOrders.jsx` |
@@ -137,7 +137,8 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Live status | Socket event triggers a refetch; 30s polling backup | `MyOrders.jsx` |
 | Ready notification | Browser `Notification` API when status becomes `ready` and permission is granted | `MyOrders.jsx` |
 | Order history and reorder | Shows past orders; re-fetches current menu/prices and skips unavailable items | `MyOrders.jsx` |
-| Search, categories, images, popular/special labels | Menu image URL, name search, category chips, top-three popular items, staff-set special | `CanteenMenu.jsx` |
+| Search, categories, images, popular/special labels | Menu image URL with unavailable-image fallback, name search, category chips, top-three popular items, staff-set special | `CanteenMenu.jsx` |
+| Global search | Search active canteens, available food, and role-appropriate pages | `SearchPage.jsx`, `/api/search` |
 | Verified item reviews | A student/teacher can review an item only after collecting an order that included it | `ReviewForm.jsx`, review API |
 | Discover tools | Bounded budget suggestions, same-item canteen comparisons, deterministic assistant | `Discover.jsx`, `/api/smart/*` |
 | Rush and estimated wait | Based on current placed/preparing order count and canteen prep estimate | `canteenController` |
@@ -154,10 +155,10 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 | Confirm payment separately | `confirmPayment` |
 | Cancel (placed/preparing) or mark no-show (ready) | `updateStatus` |
 | Call the student (phone link on card) | `Dashboard.jsx` |
-| Manage menu (add/edit/delete/availability) | `ManageMenu.jsx`, `menuController` |
+| Manage menu (add/edit/delete/availability/images) | Staff can add/edit optional food-image URLs; server validates HTTP(S) URLs | `ManageMenu.jsx`, `menuController` |
 | Switch canteens (only if managing more than one) | `CanteenSwitcher.jsx`, `useStaffCanteen.js` |
 | Open/close canteen | Staff/admin endpoint with canteen ownership check | `setOpen` |
-| Review blocked students, record no-show payment, unblock | Payment must be recorded before staff unblock | `BlockedStudents.jsx` |
+| Review blocked students, record payments, decide or correct no-show | Staff decision and explanation are stored; unpaid no-show orders prevent ordinary unblocking | `BlockedStudents.jsx`, `NoShowReview` |
 | Sales report | Today/7/30-day totals, paid/unpaid amounts, top items, pickup hours | `SalesReport.jsx` |
 
 ### C. Admin features
@@ -175,7 +176,7 @@ A MERN-stack (MongoDB, Express, React, Node.js) web app for **BBDU**, like a sma
 
 ### D. Data and safety features
 - Server recalculates prices; order items store **snapshots** (name, price) so later menu changes do not alter old orders.
-- First no-show blocks immediately; a blocked student cannot place a new order. Staff must record payment for every unpaid no-show order across all canteens before unblocking.
+- First no-show blocks immediately; a blocked student cannot place a new order. Staff record the student's explanation and their decision. Payment for every unpaid no-show order across all canteens must be recorded before an ordinary unblock. Staff can correct an erroneous canteen/system no-show to collected or cancelled; that correction adjusts the no-show count and is audited.
 - No online payment or separate fine is implemented.
 - Legacy orders without pickup codes can still be collected without a code.
 
@@ -291,12 +292,13 @@ Student / Staff / Admin browser
 | `CanteenList.jsx` | `/`, `/canteens` | Lists active canteens with optional administrator-managed logo URLs and a built-in fallback (HTTPS recommended) |
 | `CanteenMenu.jsx` | `/canteen/:id` | Menu and add-to-cart |
 | `InfoPage.jsx` | `/help/*`, `/contact`, `/privacy`, `/terms`, `/payment-info` | Ordering, pickup, FAQ, contact, privacy, terms, and counter-payment information |
-| `Cart.jsx` | `/cart` | Shows "Ordering from X", pickup slots and note; closed canteens are blocked in UI and server |
+| `Cart.jsx` | `/cart` | Shows "Ordering from X", pickup slots, note, and collection reminder; closed canteens are blocked in UI and server |
 | `MyOrders.jsx` | `/orders` | Current and past orders, pickup code, cancel, reorder, late notice, live updates |
+| `SearchPage.jsx` | `/search` | Authenticated search for food, active canteens, and role-appropriate pages |
 | `AccountSettings.jsx` | `/account` | View/edit profile details and change the signed-in user's password |
 | `Dashboard.jsx` | `/dashboard` | Staff order board |
-| `ManageMenu.jsx` | `/manage-menu` | Staff menu editor |
-| `BlockedStudents.jsx` | `/blocked` | Record no-show order payments and unblock users |
+| `ManageMenu.jsx` | `/manage-menu` | Staff menu editor including optional food-image URLs |
+| `BlockedStudents.jsx` | `/blocked` | Review student explanations, record payment, decide, or correct false no-show orders |
 | `SalesReport.jsx` | `/report` | Per-canteen sales/activity report |
 | `AdminPanel.jsx` | `/admin` | Canteen, staff-owner, and blocked-account administration |
 | `Discover.jsx` | `/discover` | Budget suggestions, canteen comparison, deterministic assistant |
@@ -346,7 +348,7 @@ The public and student/teacher layouts include a shared footer. Its PWA install 
 | `utils/canteenLogo.js` | Validates optional administrator-managed canteen logo URLs |
 | `slots.js` | Ten-minute slot boundaries and active-order count |
 | `noShow.js` | Shared manual/automatic no-show rule and cron schedule |
-| `models/` | `User`, `Canteen`, `MenuItem`, `Order`, `Counter` |
+| `models/` | `User`, `Canteen`, `MenuItem`, `Order`, `Counter`, `NoShowReview` |
 | `controllers/` | `auth`, `menu`, `order`, `canteen`, `admin` |
 | `routes/` | `authRoutes`, `menuRoutes`, `orderRoutes`, `canteenRoutes`, `adminRoutes` |
 | `seed.js` | Adds sample canteens and menus; **deletes and replaces menu items for those sample canteens** |
@@ -370,7 +372,8 @@ The public and student/teacher layouts include a shared footer. Its PWA install 
 | `verifyAndCollect` | Order must be `ready`; checks code (max 5 wrong tries then 429); sets `collected`; sets `paid` only if `paid === true`; emits |
 | `confirmPayment` | For `ready`, `collected`, or `no_show` orders → `paymentStatus: "paid"`; emits |
 | `getSalesReport` | Validates canteen access and period; reports payments, unpaid amounts, no-shows, best sellers, pickup hours |
-| `markNoShow` | Atomically changes a ready order to no-show; increments the user count and blocks at the first no-show |
+| `markNoShow` | Atomically changes a ready order to no-show; records its timestamp, increments the user count, and blocks at the first no-show |
+| `resolveNoShow` | Staff corrects an erroneous no-show to collected or cancelled with an explanation, review record, and audit events |
 
 ### `socket.js` functions (verified)
 - `initSocket(server)` – creates the Socket.IO server with credentialed CORS from `CLIENT_URL`. A middleware verifies the HttpOnly-cookie JWT and current token version, loads the user from the DB, and rejects invalid sessions. On connect, the socket joins `user:<id>`. `joinCanteen` validates the id and `canManageCanteen`; `leaveCanteen` leaves the room.
@@ -460,11 +463,11 @@ stateDiagram-v2
 | placed → cancelled (student) | `PATCH /orders/:id/cancel` → `cancelOrder` |
 | ready → collected | `PATCH /orders/:id/verify` → `verifyAndCollect` |
 | ready → no_show | `PATCH /orders/:id/status` → `markNoShow`; first no-show blocks the account |
-| record payment for a no-show order | `PATCH /orders/:id/payment`; staff must record the full order amount at the counter before unblocking |
+| record payment for a no-show order | `PATCH /orders/:id/payment`; staff record the full order amount at the counter before ordinary unblocking |
 
 **Status vs payment:** `status` says where the food is in the process; `paymentStatus` says whether money was received. They are independent. Collecting never marks paid automatically; staff must tick the box or confirm payment. A no-show is an exception to the usual collection: the student is blocked immediately and can be unblocked by staff only after the full order amount is paid in person and recorded.
 
-The automatic no-show check runs every minute and marks an order after it has been ready for 20 minutes (30 minutes after the student uses the one-time late extension). Staff can also manually mark an order while it is ready. Both paths use the same `markNoShow` operation; the ready-only database update prevents the same order being counted twice. The first no-show blocks the account. Staff record the full order total as paid at the counter for each no-show order before unblocking; no separate fine or online payment exists.
+The automatic no-show check runs every minute and marks an order after it has been ready for 20 minutes (30 minutes after the student uses the one-time late extension). Staff can also manually mark an order while it is ready. Both paths use the same `markNoShow` operation; the ready-only database update prevents the same order being counted twice. The first no-show blocks the account. Staff review the student's explanation and record the decision; all unpaid no-show orders must be paid at the counter before an ordinary unblock. A verified canteen/system error can be corrected to collected or cancelled, decrementing the no-show count as appropriate and generating audit events. There is no separate fine or online payment.
 
 **Pickup slots:** the client displays the next 12 ten-minute slots. The server checks active orders and creates a new order in a MongoDB transaction after writing to the user and canteen lock documents. This serializes competing submissions for the same user/canteen; verify transaction behavior against the actual Atlas deployment.
 
@@ -495,7 +498,8 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected brows
 | PATCH | `/api/canteens/:id` | Edit canteen fields/active state | Admin |
 | PATCH | `/api/canteens/:id/open` | Open or close a canteen | Assigned staff/admin |
 | GET | `/api/canteens/:id/blocked` | Blocked users with no-show orders at the canteen | Assigned staff/admin |
-| PATCH | `/api/canteens/:id/unblock/:userId` | Unblock after all of the user's unpaid no-show orders are paid | Assigned staff/admin |
+| PATCH | `/api/canteens/:id/unblock/:userId` | Review and unblock after all unpaid no-show orders are paid; explanation required | Assigned staff/admin |
+| PATCH | `/api/canteens/:id/review/:userId` | Record a review decision to keep blocked or approve unblocking | Assigned staff/admin |
 | GET | `/api/menu?canteen=<id>` | Read menu items; canteen filter optional | Public |
 | POST | `/api/menu` | Create menu item | Assigned staff/admin |
 | PATCH | `/api/menu/:id` | Edit item fields/availability/special flag | Assigned staff/admin |
@@ -505,6 +509,7 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected brows
 | GET | `/api/orders` (optional `?canteen=<id>` for admin) | Active and collected-but-unpaid orders | Assigned staff/admin; staff can request only assigned canteens |
 | GET | `/api/orders/report?canteen=<id>&days=1\|7\|30` | Sales/payment/no-show report | Assigned staff/admin |
 | PATCH | `/api/orders/:id/status` | Prepare, mark ready, or manually mark no-show | Assigned staff/admin |
+| PATCH | `/api/orders/:id/review-no-show` | Correct an erroneous no-show to collected or cancelled with an explanation | Assigned staff/admin |
 | PATCH | `/api/orders/:id/cancel` | Cancel own placed order | Order owner |
 | PATCH | `/api/orders/:id/late` | One 10-minute extension while ready | Order owner |
 | PATCH | `/api/orders/:id/verify` | Verify pickup code and collect | Assigned staff/admin |
@@ -516,10 +521,12 @@ All responses are JSON. Errors look like `{ "message": "..." }`. Protected brows
 | POST | `/api/reviews` | Create review for an item in own collected order | Student/teacher |
 | POST | `/api/smart/meal-suggestions` | Return bounded available-menu combinations under a budget | Student/teacher |
 | POST | `/api/smart/assistant` | Deterministic menu/canteen/own-order help | Student/teacher |
+| GET | `/api/search?q=<text>` | Search active canteens and available food items | Logged-in user |
 | GET | `/api/admin/overview` | Canteens, owners, blocked students/teachers | Admin |
 | POST | `/api/admin/staff` | Create staff account and assign canteens | Admin |
 | PATCH | `/api/admin/users/:id/canteens` | Change staff canteen assignments | Admin |
-| PATCH | `/api/admin/users/:id/unblock` | Admin unblock after no-show orders are paid | Admin |
+| PATCH | `/api/admin/users/:id/review` | Record an admin decision to keep blocked or approve unblocking | Admin |
+| PATCH | `/api/admin/users/:id/unblock` | Review and unblock after no-show orders are paid; explanation required | Admin |
 | PATCH | `/api/admin/users/:id/password` | Reset a canteen owner's password | Admin |
 | GET | `/api/admin/reviews` | Paginated review moderation list | Admin |
 | PATCH | `/api/admin/reviews/:id/moderation` | Hide or restore a review | Admin |
@@ -599,7 +606,7 @@ Response `201`: the order document (including `orderNumber`, `total`, `status: "
 - Customers pay **cash or UPI at the counter**.
 - `paymentStatus` is `pending` or `paid`. Staff set it by ticking **Payment received** when collecting, or later with **Confirm payment**.
 - The check happens in the backend (`verifyAndCollect`, `confirmPayment`), but the "payment" is just staff recording what happened at the counter.
-- After a no-show the full saved order total is owed at the counter; staff record it before unblocking the account. There is no separate fine.
+- No-show orders require staff review. Students should explain what happened at the canteen; staff decisions and corrections are recorded. Any outstanding no-show order total must be paid at the counter before an ordinary unblock. Verified canteen/system errors can be corrected to collected or cancelled, decrementing the no-show count and unblocking when that was the counted strike. There is no separate fine.
 
 ---
 
@@ -700,7 +707,7 @@ canteen-app/
 │       └── App.jsx, index.css
 ├── docs/              Phone plan, staff guide, pilot, security and go-live guides
 ├── server/
-│   ├── models/        User, Canteen, MenuItem, Order, Counter, Review, AuditLog
+│   ├── models/        User, Canteen, MenuItem, Order, Counter, Review, NoShowReview, AuditLog
 │   ├── controllers/   auth, menu, order, canteen, admin, review, smart, audit
 │   ├── routes/        auth, menu, order, canteen, admin, review, smart
 │   ├── middleware/    auth.js
@@ -728,7 +735,7 @@ The backend has dependency-light tests using Node's built-in test runner; they c
 
 Not yet covered by automated tests: real HTTP/API integration with a disposable database, end-to-end student/staff/admin flows, camera permissions/scanning, cart UI, React component behavior, and actual service-worker/offline behavior. Do not point tests at the production Atlas database.
 
-For manual checks use separate test student, staff, and admin accounts; try a staff account against another canteen; test invalid order transitions and five wrong pickup codes; verify a no-show blocks immediately and that payment must be recorded before staff can unblock. Use browser DevTools Network to inspect calls. Never copy tokens into tickets or chat.
+For manual checks use separate test student, staff, and admin accounts; try a staff account against another canteen; test invalid order transitions and five wrong pickup codes; verify a no-show blocks immediately, staff review is required, payment is required before ordinary unblocking, and an erroneous canteen/system no-show can be corrected to the appropriate outcome. Use browser DevTools Network to inspect calls. Never copy tokens into tickets or chat.
 
 To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test` and `node:assert`, and run `npm --prefix server test`.
 To add a client unit test, add `*.test.js` under `client/test/` and use the same built-in runner with `npm --prefix client test`.

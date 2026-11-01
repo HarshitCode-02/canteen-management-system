@@ -21,7 +21,7 @@ BBDU college canteen pre-order platform: users choose a canteen, browse its menu
 
 I build this alone. The owner reports the product is deployed and working on Vercel, with a canteen handover planned. Do not claim real-device coverage, completed training, a successful pilot, or actual real-user usage unless verified.
 
-Recent support/UI work adds a responsive footer and public help/payment/privacy/terms pages, browser-aware PWA install guidance, optional administrator-managed canteen logo URLs, and shared client/server error sanitization.
+Recent support/UI work adds responsive help/footer pages, optional canteen and food-item image URLs with fallbacks, authenticated global search, a cart collection notice, staff-reviewed no-show decisions/corrections, browser-aware PWA guidance, and shared client/server error sanitization.
 
 ## How to work with me / reply format
 
@@ -59,7 +59,7 @@ client/src/  App.jsx, api.js, apiErrors.js, socket.js, sound.js, useStaffCanteen
 client/test/  API error classification tests
 server/       server.js, socket.js, slots.js, noShow.js, seed.js,
               migrate-multi-canteen.js, makeAdmin.js
-  models/     User, Canteen, MenuItem, Order, Counter, Review, AuditLog
+  models/     User, Canteen, MenuItem, Order, Counter, Review, NoShowReview, AuditLog
   controllers/ auth, menu, order, canteen, admin, review, smart, audit
   routes/     authRoutes, menuRoutes, orderRoutes, canteenRoutes, adminRoutes,
               reviewRoutes, smartRoutes
@@ -84,7 +84,8 @@ vercel.json, client/vercel.json, server/index.js
 ## API route groups
 
 - Auth: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `PATCH /api/auth/me` (edit own profile; password required for email change), `PATCH /api/auth/password`.
-- Canteens: public `GET /api/canteens`, `GET /api/canteens/:id`, `GET /api/canteens/:id/menu`, `GET /api/canteens/:id/slots`; admin create/edit; assigned staff/admin open/close, list blocked users, and unblock after payment.
+- Canteens: public `GET /api/canteens`, `GET /api/canteens/:id`, `GET /api/canteens/:id/menu`, `GET /api/canteens/:id/slots`; admin create/edit; assigned staff/admin open/close, list blocked users, and record no-show review decisions.
+- Search: authenticated `GET /api/search?q=<text>` returns bounded results for active canteens and available food; role-appropriate pages are filtered in the client.
 - Menu: public `GET /api/menu`; assigned staff/admin `POST`, `PATCH /:id`, `DELETE /:id`.
 - Orders: logged-in create/history/cancel/late and issue own ready-order pickup QR; staff/admin list, report, status, verify by four-digit code or QR, and record payment.
 - Reviews: public visible menu-item reviews; student/teacher submission requires an owned collected order containing the item; admin moderation under `/api/admin/reviews`.
@@ -123,7 +124,7 @@ vercel.json, client/vercel.json, server/index.js
 - A secure random 4-digit pickup code is shown only to the owner while active. Staff verify it; after five wrong attempts, further attempts return 429.
 - Socket.IO events use HttpOnly-cookie-authenticated user/canteen rooms; canteen joins require ownership. Dashboard/My Orders also poll every 30 seconds.
 - Pickup slots are ten minutes; the next 12 are displayed and `slotLimit` is checked server-side.
-- **Current no-show rule:** long-running hosts run the job every minute; Vercel requires a trusted external scheduler to call `GET /api/internal/no-show` with `CRON_SECRET` every minute. Verify this scheduler is configured and working; Vercel Hobby Cron is only daily. Default no-show is after 20 minutes in `ready`, or 30 minutes after the one-time “running late” extension. Staff can manually mark a ready order sooner. Both use `markNoShow`; order status, strike count, and immediate block are transactional. Student owes the full no-show order total. Counter payment for every unpaid no-show order across all canteens must be recorded before unblocking; no separate fine/gateway. Do not restore the old three-strike rule.
+- **Current no-show rule:** long-running hosts run the job every minute; Vercel requires a trusted external scheduler to call `GET /api/internal/no-show` with `CRON_SECRET` every minute. Verify this scheduler is configured and working; Vercel Hobby Cron is only daily. Default no-show is after 20 minutes in `ready`, or 30 minutes after the one-time “running late” extension. Staff can manually mark a ready order sooner. Both use `markNoShow`; order status, strike count, and immediate block are transactional. Staff record the student's explanation and review decision. Any unpaid no-show order across all canteens must be paid at the counter before an ordinary unblock. Staff can correct an erroneous canteen/system no-show to collected or cancelled, with a review record and audit events. Do not restore the old three-strike rule.
 - QR tokens are random, expire 30 minutes after ready, and only their hash is stored; collection is single-use and staff-canteen authorized. The four-digit code remains supported.
 - Reviews require a collected order owned by the reviewer and containing the reviewed item; one review is allowed per user/order/item. Public ratings include only visible reviews.
 - Discover suggestions and assistant responses use bounded deterministic logic; there is no paid AI or allergy/vegetarian claim. Assistant order lookup is scoped to the signed-in user.
@@ -139,7 +140,7 @@ vercel.json, client/vercel.json, server/index.js
 - Day 22: login/register per-IP rate limits, failed pickup-code throttling, Helmet, HttpOnly cookie sessions, unsafe-request Origin checks, sanitized production errors, a 100 KB JSON body cap, transactional order/no-show updates, and order quantity caps are implemented. Limits on other routes and broader validation remain **not implemented**.
 - Day 23: basic responsive/touch CSS changes exist; real-phone verification is still pending.
 - Phase 2 code: atomic QR pickup, verified reviews/moderation, deterministic Discover tools, static-only PWA offline shell, and admin audit log.
-- Recent UI/support work: shared responsive footer and public information pages; optional canteen logo URLs with a fallback; PWA install guidance; safe API/network error handling and a React error boundary.
+- Recent UI/support work: shared responsive footer and public information pages; optional canteen and food-item image URLs with fallbacks; authenticated global search; cart collection notice; staff-reviewed no-show workflows; PWA install guidance; safe API/network error handling and a React error boundary.
 - Backend suite includes dependency-light unit tests; the client has a small `node:test` suite plus lint/build. These do not prove full DB-backed, real-device, or live deployment behavior.
 - Dockerfiles and Compose support local development. GitHub Actions validates, tests, lints, builds, and builds Docker images; it does not deploy. The owner reports Vercel deployment is working; verify live environment and scheduler settings before handover.
 

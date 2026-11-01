@@ -166,10 +166,10 @@ function OrderCard({ order, onCancel, reviewedItems, onReviewed }) {
 
       {order.status === "no_show" && (
         <p className="error">
-          You did not collect this order.{" "}
+          This order was marked as not collected. If that is incorrect, explain what happened to canteen staff for review.{" "}
           {order.paymentStatus === "paid"
-            ? "Payment has been recorded."
-            : `Pay ₹${order.total} at the canteen counter; staff must record the payment before unblocking your account.`}
+            ? "Payment has been recorded. Staff still need to review your account before unblocking it."
+            : `Pay ₹${order.total} at the canteen counter and ask staff to record the payment. Staff will review your explanation before deciding whether to unblock your account.`}
         </p>
       )}
 
@@ -361,9 +361,9 @@ export default function MyOrders() {
         <div className="blocked-banner">
           <b>You are blocked from placing orders.</b>
           <p>
-            You did not collect an order from {canteenNames || "the canteen"}. Pay the full
-            no-show order amount at that canteen's counter. Staff must record the payment
-            before they can unblock your account.
+            An order from {canteenNames || "a canteen"} was marked as not collected. Visit the relevant canteen
+            to explain what happened and request a staff review. Pay any outstanding no-show order amount
+            at the counter; staff must record all outstanding payments before approving an unblock.
           </p>
         </div>
       )}

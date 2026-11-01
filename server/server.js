@@ -99,6 +99,9 @@ app.use("/api/reviews", reviewRoutes);
 const smartRoutes = require("./routes/smartRoutes");
 app.use("/api/smart", smartRoutes);
 
+const searchRoutes = require("./routes/searchRoutes");
+app.use("/api/search", searchRoutes);
+
 app.get("/api/internal/no-show", cronAuth, async (req, res, next) => {
   try {
     await runNoShowCheck();

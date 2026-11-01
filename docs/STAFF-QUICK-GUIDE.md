@@ -22,10 +22,11 @@ There is no online payment or delivery. Never ask a student for their password, 
 ## No-show and menu changes
 
 - Mark an order no-show only when it is still ready and the student did not collect it within the allowed time. One no-show blocks the student's account immediately.
-- In **Blocked**, confirm the full amount of each no-show order only after receiving cash or UPI at the counter. Unblock is enabled only after all listed no-show orders are recorded as paid.
+- In **Blocked**, review ready/no-show timestamps and record the student's explanation before deciding whether to keep the block or approve unblocking. Confirm payment only after receiving cash or UPI at the counter; all no-show payments must be recorded before an ordinary unblock.
+- If a canteen or verified system error caused a false no-show, correct it to **collected** (if handed over) or **cancelled** (if not fulfilled). Enter a 10–500 character explanation; the correction and decision are retained and audited.
 - Do not share student contact details outside the canteen team.
 - In **Manage Menu**, update the price or mark an item sold out when needed. Changes apply to new orders; existing orders retain their saved price.
-- Use **Blocked** to record no-show order payments and unblock students. There is no separate fine and no online payment.
+- Use **Blocked** to document staff review, record no-show payments, make a decision, or correct a false no-show. There is no separate fine and no online payment.
 - Use **Sales Report** for order totals; collected revenue is based on collected orders and is not an online payment ledger.
 
 ## If something goes wrong

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api, { errorMessage } from "../api";
+import CanteenLogo from "../components/CanteenLogo";
 
 export default function CanteenList() {
   const [canteens, setCanteens] = useState([]);
@@ -47,7 +48,7 @@ export default function CanteenList() {
       <div className="menu-grid">
         {canteens.map((c) => (
           <Link key={c._id} to={`/canteen/${c._id}`} className="canteen-card">
-            <CanteenCardLogo key={c.logo || "default-logo"} logo={c.logo} />
+            <CanteenLogo key={c.logo || c._id} src={c.logo} name={c.name} />
             <div className="canteen-card-content">
               <div className="canteen-card-heading">
                 <h3>{c.name}</h3>
@@ -64,30 +65,6 @@ export default function CanteenList() {
           </Link>
         ))}
       </div>
-    </div>
-  );
-}
-
-function CanteenCardLogo({ logo }) {
-  const [failed, setFailed] = useState(false);
-
-  if (!logo || failed) {
-    return (
-      <div className="canteen-card-image canteen-card-image-fallback" aria-hidden="true">
-        <img src="/pwa-icon.svg" alt="" />
-        <span>CampusBites</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="canteen-card-image">
-      <img
-        src={logo}
-        alt=""
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
     </div>
   );
 }

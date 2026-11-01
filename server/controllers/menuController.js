@@ -4,6 +4,7 @@ const Canteen = require("../models/Canteen");
 const { canManageCanteen } = require("../middleware/auth");
 const { loadVisibleRatings } = require("../services/reviewRatings");
 const { writeAudit } = require("../services/auditLog");
+const { isValidImageUrl } = require("../utils/imageUrl");
 
 const FIELDS = ["name", "price", "category", "image", "isAvailable","isSpecial", "prepTimeMins"];
 
@@ -56,6 +57,9 @@ exports.createItem = async (req, res, next) => {
     if (!canManageCanteen(req.user, canteenId)) {
       return res.status(403).json({ message: "You cannot manage this canteen" });
     }
+    if (req.body.image !== undefined && !isValidImageUrl(req.body.image)) {
+      return res.status(400).json({ message: "Image must be an HTTP or HTTPS URL no longer than 2048 characters" });
+    }
     if (!(await Canteen.exists({ _id: canteenId }))) {
       return res.status(404).json({ message: "Canteen not found" });
     }
@@ -84,6 +88,9 @@ exports.updateItem = async (req, res, next) => {
     if (!item) return res.status(404).json({ message: "Menu item not found" });
     if (!canManageCanteen(req.user, item.canteen)) {
       return res.status(403).json({ message: "You cannot manage this canteen" });
+    }
+    if (req.body.image !== undefined && !isValidImageUrl(req.body.image)) {
+      return res.status(400).json({ message: "Image must be an HTTP or HTTPS URL no longer than 2048 characters" });
     }
 
     const previousPrice = item.price;

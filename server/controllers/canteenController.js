@@ -9,6 +9,7 @@ const { emitToUser } = require("../socket");
 const { loadVisibleRatings } = require("../services/reviewRatings");
 const { writeAudit } = require("../services/auditLog");
 const { isValidCanteenLogo } = require("../utils/canteenLogo");
+const NoShowReview = require("../models/NoShowReview");
 
 
 
@@ -245,7 +246,15 @@ exports.getBlockedUsers = async (req, res, next) => {
       user: { $in: users.map((u) => u._id) },
     })
       .sort({ createdAt: -1 })
-      .select("user orderNumber total pickupTime createdAt paymentStatus");
+      .select("user orderNumber total pickupTime createdAt readyAt noShowAt paymentStatus");
+    const reviews = await NoShowReview.find({
+      canteen: id,
+      user: { $in: users.map((u) => u._id) },
+    })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .select("user order explanation decision correctedStatus reviewedBy createdAt")
+      .populate("reviewedBy", "name");
 
     res.json(
       users.map((u) => ({
@@ -255,6 +264,7 @@ exports.getBlockedUsers = async (req, res, next) => {
         noShowCount: u.noShowCount,
         blockedAt: u.blockedAt,
         noShowOrders: orders.filter((o) => String(o.user) === String(u._id)),
+        reviews: reviews.filter((review) => String(review.user) === String(u._id)),
       }))
     );
   } catch (err) {
@@ -264,6 +274,12 @@ exports.getBlockedUsers = async (req, res, next) => {
 
 // PATCH /api/canteens/:id/unblock/:userId  (staff of that canteen, or admin)
 exports.unblockUser = async (req, res, next) => {
+  req.body = { ...(req.body || {}), decision: "unblock" };
+  return exports.reviewBlockedUser(req, res, next);
+};
+
+// PATCH /api/canteens/:id/review/:userId  (assigned staff/admin)
+exports.reviewBlockedUser = async (req, res, next) => {
   try {
     const { id, userId } = req.params;
     if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(userId)) {
@@ -272,10 +288,61 @@ exports.unblockUser = async (req, res, next) => {
     if (!canManageCanteen(req.user, id)) {
       return res.status(403).json({ message: "You cannot manage this canteen" });
     }
+    const explanation = typeof req.body?.explanation === "string" ? req.body.explanation.trim() : "";
+    if (explanation.length < 10 || explanation.length > 500) {
+      return res.status(400).json({ message: "Record the student's explanation and your review (10–500 characters)" });
+    }
+    const decision = req.body?.decision;
+    if (!["keep_blocked", "unblock"].includes(decision)) {
+      return res.status(400).json({ message: "decision must be keep_blocked or unblock" });
+    }
     const hadNoShow = await Order.exists({ canteen: id, user: userId, status: "no_show" });
     if (!hadNoShow) {
       return res.status(403).json({ message: "This student has no no-show at your canteen" });
     }
+    if (decision === "keep_blocked") {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          const currentNoShow = await Order.exists({
+            _id: hadNoShow._id,
+            canteen: id,
+            user: userId,
+            status: "no_show",
+          }).session(session);
+          if (!currentNoShow) {
+            const error = new Error("The no-show order changed; refresh and review again");
+            error.status = 409;
+            throw error;
+          }
+          const user = await User.findOne({ _id: userId, isBlocked: true }).session(session).select("name");
+          if (!user) {
+            const error = new Error("This student is not blocked");
+            error.status = 404;
+            throw error;
+          }
+          await NoShowReview.create([{
+            user: userId,
+            canteen: id,
+            order: currentNoShow._id,
+            reviewedBy: req.user._id,
+            explanation,
+            decision: "kept_blocked",
+          }], { session });
+          await writeAudit(req, {
+            eventType: "user.reviewed",
+            entityType: "user",
+            entityId: userId,
+            canteen: id,
+            details: { decision, reasonProvided: true },
+          }, session);
+        });
+      } finally {
+        await session.endSession();
+      }
+      return res.json({ message: "Review recorded. The account remains blocked." });
+    }
+
     const unpaidNoShow = await Order.exists({
       user: userId,
       status: "no_show",
@@ -286,23 +353,51 @@ exports.unblockUser = async (req, res, next) => {
         message: "Confirm counter payment for every no-show order before unblocking the student",
       });
     }
-    const user = await User.findOneAndUpdate(
-      { _id: userId, isBlocked: true },
-      { isBlocked: false, noShowCount: 0, $unset: { blockedAt: 1 } },
-      { new: true }
-    ).select("name");
-    if (!user) return res.status(404).json({ message: "This student is not blocked" });
 
-    await writeAudit(req, {
-      eventType: "user.unblocked",
-      entityType: "user",
-      entityId: user._id,
-      canteen: id,
-    });
-    emitToUser(userId, "accountUpdated", {}); // student's page refreshes at once
-
-    res.json({ message: `${user.name} has been unblocked` });
+    const session = await mongoose.startSession();
+    let user;
+    try {
+      await session.withTransaction(async () => {
+        user = await User.findOneAndUpdate(
+          { _id: userId, isBlocked: true },
+          { isBlocked: false, noShowCount: 0, $unset: { blockedAt: 1 } },
+          { new: true, session }
+        ).select("name");
+        if (!user) {
+          const error = new Error("This student is not blocked");
+          error.status = 404;
+          throw error;
+        }
+        await NoShowReview.create([{
+          user: userId,
+          canteen: id,
+          order: hadNoShow._id,
+          reviewedBy: req.user._id,
+          explanation,
+          decision: "unblocked",
+        }], { session });
+        await writeAudit(req, {
+          eventType: "user.reviewed",
+          entityType: "user",
+          entityId: userId,
+          canteen: id,
+          details: { decision, reasonProvided: true },
+        }, session);
+        await writeAudit(req, {
+          eventType: "user.unblocked",
+          entityType: "user",
+          entityId: userId,
+          canteen: id,
+          details: { decision, reasonProvided: true },
+        }, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+    emitToUser(userId, "accountUpdated", { isBlocked: false });
+    res.json({ message: `${user.name} has been unblocked after review` });
   } catch (err) {
-    next(err);
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    return next(err);
   }
 };

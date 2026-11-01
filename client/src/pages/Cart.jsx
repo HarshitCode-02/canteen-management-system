@@ -198,6 +198,20 @@ export default function Cart() {
       {availabilityChecked && !availabilityError && !isOpen && <p className="error">This canteen is closed right now. You can't place an order.</p>}
       {error && <p className="error" role="alert">{error}</p>}
       <p className="muted">You pay at the counter when you collect.</p>
+      <aside className="cart-collection-notice" role="note" aria-labelledby="cart-collection-title">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+          <path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M12 9v5m0 3h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        <div>
+          <strong id="cart-collection-title">Please collect the order you place.</strong>
+          <p>
+            An order that remains ready for pickup may be recorded as uncollected and block ordering.
+            If the canteen cannot fulfil it or its status is incorrect, speak with canteen staff so
+            they can review and correct the order.
+          </p>
+        </div>
+      </aside>
       <label className="field">
         Note for the canteen (optional)
         <input

@@ -11,6 +11,8 @@ export default function BlockedStudents() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [reviewNotes, setReviewNotes] = useState({});
   const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
@@ -34,14 +36,36 @@ export default function BlockedStudents() {
   }, [load]);
 
   const unblock = async (s) => {
-    if (s.noShowOrders.some((order) => order.paymentStatus !== "paid")) {
-      setError("Record payment for every no-show order before unblocking this student.");
+    await submitReview(s, "unblock");
+  };
+
+  const submitReview = async (student, decision, orderId) => {
+    const explanation = (reviewNotes[student._id] || "").trim();
+    if (explanation.length < 10 || explanation.length > 500) {
+      setError("Record the student's explanation and your review in 10–500 characters.");
       return;
     }
-    if (!window.confirm(`Confirm that ${s.name} has paid the full amount for every no-show order at the counter, then unblock them?`)) return;
-    setBusyId(s._id);
+    if (decision === "unblock" && !window.confirm(`After reviewing ${student.name}'s order history and explanation, approve unblocking? All no-show orders must already be paid at the counter.`)) return;
+    if (decision.startsWith("order_corrected:") && !window.confirm(`Confirm the no-show was caused by a canteen or verified system error, and correct the order to ${decision.split(":")[1]}? The related block may be removed.`)) return;
+
+    setBusyId(`${decision}:${student._id}`);
+    setError("");
+    setMessage("");
     try {
-      await api.patch(`/canteens/${canteenId}/unblock/${s._id}`);
+      if (decision.startsWith("order_corrected:")) {
+        const correctedStatus = decision.split(":")[1];
+        await api.patch(`/orders/${orderId}/review-no-show`, { explanation, correctedStatus });
+      } else {
+        await api.patch(`/canteens/${canteenId}/review/${student._id}`, { explanation, decision });
+      }
+      setReviewNotes((current) => ({ ...current, [student._id]: "" }));
+      setMessage(
+        decision === "unblock"
+          ? `${student.name} was unblocked after review.`
+          : decision === "keep_blocked"
+            ? `Review recorded. ${student.name} remains blocked.`
+            : "No-show corrected as a canteen/system issue."
+      );
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -58,6 +82,7 @@ export default function BlockedStudents() {
       <h2>{canteen?.name} blocked students ({students.length})</h2>
       <CanteenSwitcher canteens={canteens} canteenId={canteenId} onChange={setCanteenId} />
       {error && <p className="error" role="alert">{error}</p>}
+      {message && <p className="success-message" role="status">{message}</p>}
 
       {students.length === 0 ? (
         <p className="muted">No blocked students from this canteen.</p>
@@ -70,23 +95,25 @@ export default function BlockedStudents() {
                 {s.phone && <a href={`tel:${s.phone}`}>{s.phone}</a>}
                 {s.blockedAt && <span className="muted"> · blocked {fmtDate(s.blockedAt)}</span>}
               </p>
-              <p className="muted">Pay each order amount at the counter before unblocking:</p>
+              <p className="muted">Review the student's explanation and order history. Record payment for outstanding no-show orders before approving an unblock.</p>
               <ul className="blocked-order-list">
                 {s.noShowOrders.map((o) => (
                   <li className="blocked-order-row" key={o._id}>
                     <div className="blocked-order-details">
                       <b>Order #{o.orderNumber} · ₹{o.total}</b>
                       <span className="muted">Pickup {fmtDate(o.pickupTime)}</span>
+                      {o.readyAt && <span className="muted">Marked ready {fmtDate(o.readyAt)}</span>}
+                      {o.noShowAt && <span className="muted">Marked uncollected {fmtDate(o.noShowAt)}</span>}
                     </div>
                     {o.paymentStatus === "paid" ? (
                       <span className="blocked-paid" aria-label="Payment recorded">Paid</span>
                     ) : (
                       <button
                         className="small"
-                        disabled={busyId === s._id}
+                        disabled={busyId !== null}
                         onClick={async () => {
                           if (!window.confirm(`Confirm you received ₹${o.total} for no-show order #${o.orderNumber} at the counter?`)) return;
-                          setBusyId(s._id);
+                          setBusyId(`payment:${o._id}`);
                           try {
                             await api.patch(`/orders/${o._id}/payment`);
                             await load();
@@ -103,13 +130,69 @@ export default function BlockedStudents() {
                   </li>
                 ))}
               </ul>
-              <button
-                className="blocked-unblock"
-                disabled={busyId === s._id || s.noShowOrders.some((order) => order.paymentStatus !== "paid")}
-                onClick={() => unblock(s)}
-              >
-                {busyId === s._id ? "Updating..." : "Unblock student"}
-              </button>
+              <label className="field">
+                Student's explanation or reason for correcting this no-show (10–500 characters)
+                <textarea
+                  rows="3"
+                  maxLength={500}
+                  value={reviewNotes[s._id] || ""}
+                  onChange={(event) => setReviewNotes((current) => ({ ...current, [s._id]: event.target.value }))}
+                  placeholder="Record the student's account of events, or why this no-show needs correction..."
+                />
+              </label>
+              <div className="blocked-review-actions">
+                <button
+                  type="button"
+                  className="small"
+                  disabled={busyId !== null}
+                  onClick={() => submitReview(s, "keep_blocked")}
+                >
+                  {busyId === `keep_blocked:${s._id}` ? "Saving..." : "Keep blocked and record review"}
+                </button>
+                <button
+                  type="button"
+                  className="blocked-unblock"
+                  disabled={busyId !== null}
+                  onClick={() => unblock(s)}
+                >
+                  {busyId === `unblock:${s._id}` ? "Updating..." : "Approve unblocking"}
+                </button>
+              </div>
+              {s.noShowOrders.map((order) => (
+                <button
+                  key={`resolve-${order._id}`}
+                  type="button"
+                  className="small"
+                  disabled={busyId !== null}
+                  onClick={() => submitReview(s, "order_corrected:collected", order._id)}
+                >
+                  Correct #{order.orderNumber}: order was collected
+                </button>
+              ))}
+              {s.noShowOrders.map((order) => (
+                <button
+                  key={`resolve-cancelled-${order._id}`}
+                  type="button"
+                  className="small"
+                  disabled={busyId !== null}
+                  onClick={() => submitReview(s, "order_corrected:cancelled", order._id)}
+                >
+                  Correct #{order.orderNumber}: cancel due to canteen/system issue
+                </button>
+              ))}
+              {s.reviews?.length > 0 && (
+                <details className="no-show-review-history">
+                  <summary>Previous staff reviews ({s.reviews.length})</summary>
+                  {s.reviews.map((review) => (
+                    <p key={review._id}>
+                      {fmtDate(review.createdAt)} · {review.decision.replaceAll("_", " ")}
+                      {review.correctedStatus ? ` (${review.correctedStatus})` : ""}
+                      {review.reviewedBy?.name ? ` · ${review.reviewedBy.name}` : ""}
+                      <br />{review.explanation}
+                    </p>
+                  ))}
+                </details>
+              )}
             </div>
           ))}
         </div>

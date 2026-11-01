@@ -61,7 +61,7 @@ Orders move through **placed → preparing → ready → collected**. Staff may 
 3. Pay the order total by cash or UPI at the counter. Payment is not taken by the website.
 4. Staff mark the order collected and record whether payment was received. If payment was not recorded at pickup, staff can record it later.
 5. On a ready order, **I'm running late (+10 min)** may be used once. Contact the canteen promptly; do not assume the order will stay ready indefinitely.
-6. A no-show blocks new ordering. Pay the full no-show order amount at the counter; staff must record all unpaid no-show payments before the account can be unblocked.
+6. A no-show blocks new ordering. Visit the relevant canteen, explain what happened, and request a staff review. Pay any outstanding no-show order amount at the counter; staff must record all unpaid no-show payments before approving an unblock. Staff can correct a verified canteen/system error to collected or cancelled, with an explanation and audit record.
 
 ### Reorder, review, and Discover
 
@@ -90,12 +90,12 @@ The owner/staff account can manage only canteens assigned by the administrator.
 3. When the customer arrives, use **Start QR scanner** and allow camera access if the browser/device supports it, or enter the four-digit code on the order card.
 4. Verify the order belongs to your selected canteen. Hand over the food only after the server confirms collection.
 5. Mark **Payment received** only after cash or UPI has actually been received. If payment is outstanding, leave it unchecked and use **Confirm payment** after collecting the money.
-6. If an order is not collected, use **No-show** only when appropriate. The first recorded no-show blocks the student's account.
+6. If an order is not collected, use **No-show** only when appropriate. The first recorded no-show blocks the student's account. If the status is wrong, do not leave it as a no-show; use **Blocked** to review and correct it.
 
 ### Menu, blocked accounts, and reports
 
 - **Manage Menu:** add a menu item with its name, category, price, preparation estimate, and optional image URL; update prices; mark items sold out/available; mark a special; or delete an item. Menu edits affect new orders, not the saved item/price snapshot on an existing order.
-- **Blocked:** review no-show orders at your canteen. Record payment only after receiving the amount at the counter. Unblocking is permitted only after every unpaid no-show order for that person is recorded as paid.
+- **Blocked:** review the order's ready/no-show timestamps and the student's explanation. Record payment only after receiving the amount at the counter. Choose **Keep blocked and record review** or approve an unblock only after all no-show payments are recorded. For an erroneous canteen/system status, correct the order to collected or cancelled and record why. Decisions are retained and audited.
 - **Sales Report:** review order totals, payment totals, no-shows, best-selling items, and pickup-time activity. This is an operational report, not a payment processor or online accounting ledger.
 - If an order is missing, confirm the selected canteen and refresh. Do not ask customers to send passwords, tokens, or pickup QR screenshots through chat.
 

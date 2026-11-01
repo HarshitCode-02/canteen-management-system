@@ -8,7 +8,7 @@ The owner reports the current multi-canteen app is deployed on Vercel and workin
 
 The Phase 2 implementation adds owner-issued expiring QR pickup, verified reviews and admin moderation, deterministic budget/canteen/assistant tools, a static-only PWA offline shell, and admin audit history. See [the website tutorial](./docs/WEBSITE_TUTORIAL.md) for role-based use and [the Phase 2 final report](./docs/PHASE_2_FINAL_REPORT.md) for implementation details and remaining handover checks.
 
-Recent support/UI work adds responsive footer and public information pages, browser-aware PWA install guidance, optional administrator-managed canteen logo URLs, and shared client/server error sanitization.
+Recent support/UI work adds responsive footer and public information pages, browser-aware PWA install guidance, optional canteen and food-item image URLs with fallbacks, authenticated global search, cart collection notices, staff-reviewed no-show decisions/corrections, and shared client/server error sanitization.
 
 ## Safe working rules
 
@@ -23,7 +23,7 @@ Recent support/UI work adds responsive footer and public information pages, brow
 
 - `client/`: React JSX, Vite, React Router, Axios, plain CSS.
 - `server/`: Node.js, Express, MongoDB/Mongoose, JWT in an HttpOnly cookie, bcryptjs, CORS, Socket.IO and node-cron for long-running hosting.
-- `server/models/`: User, Canteen, MenuItem, Order, Counter, Review, AuditLog.
+- `server/models/`: User, Canteen, MenuItem, Order, Counter, Review, NoShowReview, AuditLog.
 - `server/controllers/`, `routes/`, `middleware/`: APIs and access control.
 - `server/test/`, `client/test/`: built-in Node test runner (`node:test`).
 - `docs/`: phone test, staff guide, pilot, security route audit, go-live checklist.
@@ -41,7 +41,7 @@ Recent support/UI work adds responsive footer and public information pages, brow
 - Reviews require an owned collected order containing the reviewed item. Student/teacher Discover tools are deterministic and do not call paid AI services.
 - Admins can inspect filtered/paginated audit events. Audit details use an allowlist and exclude credentials, pickup codes, QR tokens, and free-form review text.
 - The service worker caches static assets and an offline page only; it never caches API responses or queues orders.
-- First recorded no-show blocks immediately. Staff record payment for all unpaid no-show orders before unblocking.
+- First recorded no-show blocks immediately. Staff record the student's explanation and their review decision. Unpaid no-show orders must be paid at the counter before ordinary unblocking; verified canteen/system errors can be corrected to collected or cancelled with an audited explanation.
 - The default no-show timer is 20 minutes after ready (30 minutes after the running-late extension). On Vercel, an external trusted scheduler must call the protected `GET /api/internal/no-show` endpoint every minute with `CRON_SECRET`; in-process cron is not persistent in a serverless function.
 - Dashboard and My Orders poll every 30 seconds. Vercel builds disable Socket.IO; long-running server builds can use the cookie-authenticated socket feature.
 
@@ -62,14 +62,14 @@ npm --prefix client run build
 npm --prefix client test
 ```
 
-Most recent local verification: client lint/build and all 4 client tests passed; the focused backend error/logo/assistant suites passed 11 tests. The full backend run passed 69 of 75 tests; 6 HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. GitHub Actions run 23 for commit `ddb58d8` passed the full test/build validation and both Docker image jobs. Backend unit tests are dependency-light and do not connect to production MongoDB. Full npm audits report moderate issues in development tooling; production-only audits report zero vulnerabilities. CI does not publish images or deploy. A green CI run is not proof of live production behavior.
+Latest local verification for the current handover changes: client lint passed, all 4 client tests passed, and the production client build passed; 13 focused backend tests for no-show review/correction, image URL validation, and search query handling passed, and all backend JavaScript passed `node --check`. The most recent full backend run reported 76/82 passing; six HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. These changes have not yet received a GitHub Actions run. Backend unit tests do not connect to production MongoDB. CI does not publish images or deploy, and a green CI run is not proof of live production behavior.
 
 ## Handover priorities
 
 1. In Vercel, confirm production client/API URLs and private environment-variable names are configured correctly; never share values.
 2. Verify `/api/health`, cookie login and refresh for student, staff, and admin accounts.
 3. Place a designated test order; verify staff status changes, pickup code, counter payment, and order history.
-4. Confirm polling updates and the trusted minute no-show scheduler; verify block/payment/unblock behavior.
+4. Confirm polling updates and the trusted minute no-show scheduler; verify blocked-account review, payment, unblock, and erroneous no-show correction behavior.
 5. Test the main flows on the actual staff phone and rehearse a rollback/backup restore.
 6. Only after the handover checks, prioritize measured pilot feedback over speculative features.
 

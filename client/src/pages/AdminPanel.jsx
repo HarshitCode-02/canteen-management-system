@@ -11,6 +11,7 @@ export default function AdminPanel() {
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [canteenEdits, setCanteenEdits] = useState({});
   const [ownerPasswords, setOwnerPasswords] = useState({});
+  const [unblockNotes, setUnblockNotes] = useState({});
   const [resetForm, setResetForm] = useState(EMPTY_RESET);
   const [canteenForm, setCanteenForm] = useState(EMPTY_CANTEEN);
   const [staffForm, setStaffForm] = useState(EMPTY_STAFF);
@@ -139,14 +140,20 @@ export default function AdminPanel() {
     }
   };
 
-  const unblockUser = async (user) => {
-    if (!window.confirm(`Unblock ${user.name} and reset their no-show count? Confirm that staff recorded payment for every no-show order first.`)) return;
-    setBusy(`unblock:${user._id}`);
+  const reviewBlockedUser = async (user, decision) => {
+    const explanation = (unblockNotes[user._id] || "").trim();
+    if (explanation.length < 10 || explanation.length > 500) {
+      setError("Record the student's explanation and your review in 10–500 characters.");
+      return;
+    }
+    if (decision === "unblock" && !window.confirm(`After reviewing ${user.name}'s explanation, approve unblocking? All no-show orders must already be paid at the counter.`)) return;
+    setBusy(`${decision}:${user._id}`);
     setError("");
     setMessage("");
     try {
-      await api.patch(`/admin/users/${user._id}/unblock`);
-      setMessage(`${user.name} has been unblocked.`);
+      await api.patch(`/admin/users/${user._id}/review`, { explanation, decision });
+      setUnblockNotes((current) => ({ ...current, [user._id]: "" }));
+      setMessage(decision === "unblock" ? `${user.name} has been unblocked.` : `${user.name} remains blocked; the review was recorded.`);
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -430,12 +437,45 @@ export default function AdminPanel() {
                 <h4>{blocked.name}</h4>
                 <p>{blocked.email}</p>
                 <p className="muted">No-shows: {blocked.noShowCount}</p>
+                <ul className="blocked-order-list">
+                  {(blocked.noShowOrders || []).map((order) => (
+                    <li className="blocked-order-details" key={order._id}>
+                      <b>#{order.orderNumber} · {order.canteen?.name || "Canteen"} · ₹{order.total}</b>
+                      <span className="muted">Pickup {new Date(order.pickupTime).toLocaleString("en-IN")}</span>
+                      {order.readyAt && <span className="muted">Ready {new Date(order.readyAt).toLocaleString("en-IN")}</span>}
+                      {order.noShowAt && <span className="muted">Marked uncollected {new Date(order.noShowAt).toLocaleString("en-IN")}</span>}
+                      {order.paymentStatus === "paid"
+                        ? <span className="blocked-paid">Paid</span>
+                        : <span className="error">Payment not recorded</span>}
+                    </li>
+                  ))}
+                </ul>
+                <label className="field">
+                  Student's explanation and review note (10–500 characters)
+                  <textarea
+                    rows="3"
+                    maxLength={500}
+                    value={unblockNotes[blocked._id] || ""}
+                    onChange={(event) => setUnblockNotes((current) => ({
+                      ...current,
+                      [blocked._id]: event.target.value,
+                    }))}
+                    placeholder="Record the student's account of events and your decision..."
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={busy === `keep_blocked:${blocked._id}`}
+                  onClick={() => reviewBlockedUser(blocked, "keep_blocked")}
+                >
+                  {busy === `keep_blocked:${blocked._id}` ? "Saving..." : "Keep blocked and record review"}
+                </button>
                 <button
                   type="button"
                   disabled={busy === `unblock:${blocked._id}`}
-                  onClick={() => unblockUser(blocked)}
+                  onClick={() => reviewBlockedUser(blocked, "unblock")}
                 >
-                  {busy === `unblock:${blocked._id}` ? "Unblocking..." : "Unblock account"}
+                  {busy === `unblock:${blocked._id}` ? "Unblocking..." : "Approve unblocking"}
                 </button>
               </article>
             ))}

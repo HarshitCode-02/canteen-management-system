@@ -4,7 +4,7 @@ Use this as a practice guide, not a script to memorize. The owner reports deploy
 
 ## 30-second pitch
 
-I built a MERN pre-order platform for college canteens. Students and teachers choose a canteen, browse its menu, select a pickup slot, and collect their order at the counter. There is no delivery or online payment. Phase 2 adds single-use QR pickup, verified reviews, budget-based suggestions, canteen comparison, a deterministic assistant, and admin audit history. Recent UX work adds help/payment/privacy pages, browser-aware PWA install guidance, optional canteen logos, and safer API error messages. I use HttpOnly-cookie JWT authentication, per-canteen ownership checks, server-side price calculation, MongoDB, and polling with Socket.IO support outside Vercel. The owner reports the app is deployed on Vercel; real-device testing and a canteen pilot should only be claimed after they are completed.
+I built a MERN pre-order platform for college canteens. Students and teachers choose a canteen, browse its menu, select a pickup slot, and collect their order at the counter. There is no delivery or online payment. Phase 2 adds single-use QR pickup, verified reviews, budget-based suggestions, canteen comparison, a deterministic assistant, and admin audit history. Handover improvements include authenticated global search, resilient canteen/food images, a collection reminder, and reviewed no-show decisions and corrections. I use HttpOnly-cookie JWT authentication, per-canteen ownership checks, server-side price calculation, MongoDB, and polling with Socket.IO support outside Vercel. The owner reports the app is deployed on Vercel; real-device testing and a canteen pilot should only be claimed after they are completed.
 
 ## Two-minute walkthrough
 
@@ -15,7 +15,7 @@ I built a MERN pre-order platform for college canteens. Students and teachers ch
 5. The staff dashboard refreshes orders by polling. The code also supports authenticated Socket.IO rooms on long-running hosts; the Vercel client build disables Socket.IO.
 6. When the order is ready, the student can show a short-lived QR or the existing four-digit code. Staff verification is single-use; payment remains a separate counter action.
 7. After collecting an item, a student/teacher can review it. Discover offers bounded budget suggestions, matching canteen prices, and a deterministic assistant that only reads the signed-in user's order status.
-8. Admins manage canteens (including optional logo URLs), staff assignments, blocked users, owner password resets, reviews, audit events, and reports. The first no-show blocks a student; staff record the full order amount as paid before unblocking. The footer provides help, contact, payment, privacy, terms, and supported PWA install guidance.
+8. Admins manage canteens (including optional logo URLs), staff assignments, blocked users, owner password resets, reviews, audit events, and reports. Global search finds pages, active canteens, and available food. The first no-show blocks a student; staff record the student's explanation and their review decision. Outstanding no-show payments are required before ordinary unblocking. A verified canteen/system error can be corrected to collected or cancelled, with an audit record.
 
 ## Architecture
 
@@ -42,13 +42,13 @@ The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 se
 - **Verified reviews:** a student/teacher must own a collected order containing the reviewed item. A unique index prevents duplicate reviews per order/item/user; hidden reviews do not affect public ratings.
 - **Bounded assistant/recommendations:** no external AI or paid service is called. Budget combinations use integer paise and capped search; order status uses only the authenticated user's active order.
 - **Safe error handling:** the Axios helper maps network, timeout, auth, and server failures to useful messages without displaying technical server errors. Mongoose validation errors use the central backend handler; the React error boundary covers rendering failures. A small client `node:test` suite checks the message mapping.
-- **Canteen images:** the existing `Canteen.logo` field is optional and administrator-managed, so no database migration or upload service is required. Invalid/unavailable images fall back to CampusBites branding.
+- **Canteen/food images:** existing `Canteen.logo` and `MenuItem.image` URL fields are optional; no database migration or upload service is required. Invalid/unavailable images fall back to CampusBites branding.
 - **Audit trail:** consequential mutations record actor, role, target, request ID, and allowlisted metadata; passwords, pickup codes, QR tokens, and free-form review text are excluded.
 - **Offline/PWA:** the service worker caches static assets and an offline page only; it never caches authenticated API data or queues orders.
 - **Live updates:** the server authenticates Socket.IO connections with the cookie. Users join their own room; staff can join only assigned canteen rooms. The event payload excludes pickup codes. Vercel builds disable sockets, so the deployed UI uses polling.
 - **Slot limits:** order creation uses a MongoDB transaction and per-user/per-canteen write locks around active-order and slot checks. Unit tests cover the transaction path with stubs; concurrency still needs a database-backed test on a replica-set database.
 - **Single-to-multi-canteen migration:** the migration script creates/reuses CampusBites, assigns legacy menu items/orders without a canteen, assigns existing canteen staff, and copies old counters using the greater sequence. A backup and a test-database run are still important before any real migration.
-- **No-show handling:** automatic and manual paths share `markNoShow`; the first no-show blocks the account. Payment is recorded by staff at the counter and must be recorded before unblocking. The no-show order update and user block are in a MongoDB transaction. On Vercel, verify an external trusted scheduler calls the protected no-show endpoint every minute; the in-process cron is for long-running servers.
+- **No-show handling:** automatic and manual paths share `markNoShow`; the first no-show blocks the account. Staff record the student's explanation and review decision. Counter payment for all outstanding no-show orders is required before ordinary unblocking. A verified canteen/system error can be corrected to collected or cancelled; correction and unblock are transactional and audited. On Vercel, verify an external trusted scheduler calls the protected no-show endpoint every minute; the in-process cron is for long-running servers.
 
 ## Design decisions and trade-offs
 
@@ -78,7 +78,7 @@ The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 se
 15. **How do pickup slots work?** They are ten-minute windows; the server checks active orders against `slotLimit` inside its order transaction.
 16. **Is the slot limit race-proof?** The code uses transaction locks to prevent concurrent overbooking; this still needs a database-backed concurrency test.
 17. **Why are status and payment separate?** Food can be collected while the counter payment is still pending.
-18. **What is the current no-show rule?** A manually or automatically recorded first no-show blocks the account; staff record the full order total as counter-paid before unblocking.
+18. **What is the current no-show rule?** A manually or automatically recorded first no-show blocks immediately. Staff document the student's explanation and decide whether to keep the block or approve unblocking; outstanding orders must be paid and recorded first. A verified canteen/system mistake can be corrected to collected or cancelled, with a recorded explanation and audit event.
 19. **How did you migrate to multiple canteens?** The migration script attaches legacy unassigned records to CampusBites, assigns staff, and copies counters.
 20. **What is not finished?** The owner reports Vercel deployment is working. Real-device tests, pilot, database-backed API/concurrency tests, React component tests, external no-show scheduler verification, backup/restore rehearsal, and rollback testing still need confirmation. The client has a small API error-mapping test suite; it is not a component/E2E suite. Helmet and login/register/pickup-code limits are implemented.
 
@@ -89,7 +89,7 @@ The browser uses HTTP for reads and changes. On Vercel, the UI polls every 30 se
 - Added expiring single-use QR pickup, collected-order-verified reviews, deterministic budget/canteen tools, and admin audit history.
 - Added per-canteen order ownership, IST daily counters, ten-minute pickup slots, and 30-second polling; the code supports Socket.IO on long-running hosts.
 - Created staff sales reports and admin workflows for canteens, staff assignments, blocked users, and password resets.
-- Added responsive help/footer pages, optional administrator-managed canteen logo URLs, PWA installation guidance, and safe network/API error messages.
+- Added responsive help/footer pages, optional canteen and food-item image URLs with fallbacks, global search, a cart collection notice, staff-reviewed no-show handling, PWA installation guidance, and safe network/API error messages.
 - Configured development Docker Compose, GitHub Actions validation, and Vercel deployment support. The owner reports the site is deployed; do not claim real users, phone testing, or a successful pilot without evidence.
 
 ## Two-minute live demo script

@@ -56,6 +56,13 @@ export default function Navbar() {
           </svg>
           <span>{count}</span>
         </Link>
+        <Link to="/search" className="nav-search" aria-label="Search CampusBites" title="Search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21">
+            <circle cx="10.8" cy="10.8" r="6.8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="m16 16 4.5 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span>Search</span>
+        </Link>
         <Link
           to="/account"
           className="nav-user"

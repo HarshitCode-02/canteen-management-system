@@ -2,14 +2,15 @@ const cron = require("node-cron");
 const mongoose = require("mongoose");
 const Order = require("./models/Order");
 const User = require("./models/User");
-const { notifyOrder } = require("./socket");
+const { notifyOrder, emitToUser } = require("./socket");
 const { writeAudit } = require("./services/auditLog");
 
 const NO_SHOW_AFTER_MINS = 20;
 const LATE_EXTRA_MINS = 10; // one-time extra time from "I'm running late"
 const MAX_STRIKES = 1;
 
-// The one rule: ready order -> no_show, +1 strike, block at MAX_STRIKES.
+// Only an order still marked ready after its pickup grace period can become a no-show.
+// The conditional update makes the timer and staff action count the order once.
 // The status filter makes it safe if the button and the timer fire together:
 // only one of them can change the order, so the strike is counted once.
 // extraFilter lets the timer re-check "is it still overdue?" in the same update.
@@ -21,7 +22,10 @@ async function markNoShow(orderId, extraFilter = {}, req) {
     await session.withTransaction(async () => {
       order = await Order.findOneAndUpdate(
         { _id: orderId, status: "ready", ...extraFilter },
-        { $set: { status: "no_show" }, $unset: { pickupQrHash: 1, pickupQrExpiresAt: 1 } },
+        {
+          $set: { status: "no_show", noShowAt: new Date() },
+          $unset: { pickupQrHash: 1, pickupQrExpiresAt: 1 },
+        },
         { new: true, session }
       );
       if (!order) return;
@@ -57,7 +61,10 @@ async function markNoShow(orderId, extraFilter = {}, req) {
   } finally {
     await session.endSession();
   }
-  if (order) notifyOrder(order);
+  if (order) {
+    notifyOrder(order);
+    if (blockedUser) emitToUser(order.user, "accountUpdated", { isBlocked: true });
+  }
   return order;
 }
 
