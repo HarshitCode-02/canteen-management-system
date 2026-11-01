@@ -272,7 +272,9 @@ Student / Staff / Admin browser
 | File | Responsibility |
 |---|---|
 | `App.jsx` | Route table, wraps pages in providers/layout |
-| `api.js` | Axios instance (uses same-origin `/api` in production; local Vite development may use `VITE_API_URL`; sends credentials for the HttpOnly auth cookie) and `errorMessage(err)` helper |
+| `api.js`, `apiErrors.js` | Axios instance and shared safe error messages for network, timeout, auth, server, and validation responses |
+| `components/Footer.jsx`, `components/PublicLayout.jsx` | Public/student support links, legal/payment information, contact email, and PWA install guidance |
+| `components/ErrorBoundary.jsx` | Displays a recoverable fallback if a React page throws during rendering |
 | `socket.js` | `connectSocket()` (reuses one cookie-authenticated connection), `disconnectSocket()`. Vercel builds disable Socket.IO and use polling; other builds use same-origin unless local `VITE_API_URL` is set |
 | `sound.js` | `enableSound()` (must be called from a click; resumes the AudioContext) and `beep()` (880 Hz tone, 0.5 s) |
 | `useStaffCanteen.js` | Hook: loads the canteens a staff user may manage (admin: all), remembers the selected `canteenId` |
@@ -286,8 +288,9 @@ Student / Staff / Admin browser
 | Page | Route | What it does |
 |---|---|---|
 | `Login.jsx`, `Register.jsx` | `/login`, `/register` | Auth forms |
-| `CanteenList.jsx` | `/` | Lists active canteens |
+| `CanteenList.jsx` | `/`, `/canteens` | Lists active canteens with optional administrator-managed logo URLs and a built-in fallback (HTTPS recommended) |
 | `CanteenMenu.jsx` | `/canteen/:id` | Menu and add-to-cart |
+| `InfoPage.jsx` | `/help/*`, `/contact`, `/privacy`, `/terms`, `/payment-info` | Ordering, pickup, FAQ, contact, privacy, terms, and counter-payment information |
 | `Cart.jsx` | `/cart` | Shows "Ordering from X", pickup slots and note; closed canteens are blocked in UI and server |
 | `MyOrders.jsx` | `/orders` | Current and past orders, pickup code, cancel, reorder, late notice, live updates |
 | `AccountSettings.jsx` | `/account` | View/edit profile details and change the signed-in user's password |
@@ -301,6 +304,8 @@ Student / Staff / Admin browser
 | `AdminAuditLogs.jsx` | `/admin/audit-logs` | Filter and page through successful administrative/business events |
 
 The older `Menu.jsx` file is not connected to the current route table.
+
+The public and student/teacher layouts include a shared footer. Its PWA install action appears only when the browser supports installation; iOS users receive the browser's manual Add to Home Screen steps. Canteen logo URLs are optional, administrator-managed HTTP(S) URLs (use HTTPS for deployed sites); no image upload service or database migration is used. Missing or failed images show the CampusBites fallback.
 
 ### React concepts as used here
 - `useState` keeps data that changes (orders list, typed codes, `soundOn`).
@@ -337,6 +342,8 @@ The older `Menu.jsx` file is not connected to the current route table.
 | `server.js` | App setup, routes, DB connect, HTTP + Socket.IO start |
 | `socket.js` | `initSocket`, `emitToUser`, `emitToCanteen`, `notifyOrder` |
 | `middleware/auth.js` | `protect`, `authorize(...roles)`, `canManageCanteen(user, canteenId)` |
+| `middleware/errorHandler.js` | Central safe error responses and request-scoped diagnostic logging |
+| `utils/canteenLogo.js` | Validates optional administrator-managed canteen logo URLs |
 | `slots.js` | Ten-minute slot boundaries and active-order count |
 | `noShow.js` | Shared manual/automatic no-show rule and cron schedule |
 | `models/` | `User`, `Canteen`, `MenuItem`, `Order`, `Counter` |
@@ -717,13 +724,14 @@ npm --prefix client run build
 npm --prefix client run lint
 ```
 
-The backend has 67 dependency-light tests using Node's built-in test runner; they cover authorization, order transitions, QR pickup, reviews, smart tools, audit metadata, and existing security/report behavior without connecting to MongoDB. The client has no automated test script. The frontend ESLint command and production build are configured in CI. Docker image builds are a separate packaging check; CI does not deploy to Vercel.
+The backend has dependency-light tests using Node's built-in test runner; they cover authorization, order transitions, QR pickup, reviews, smart tools, audit metadata, safe API errors, and existing security/report behavior without connecting to MongoDB. The client has a small `node:test` suite for API error classification, in addition to ESLint and the production build. Docker image builds are a separate packaging check; CI does not deploy to Vercel.
 
 Not yet covered by automated tests: real HTTP/API integration with a disposable database, end-to-end student/staff/admin flows, camera permissions/scanning, cart UI, React component behavior, and actual service-worker/offline behavior. Do not point tests at the production Atlas database.
 
 For manual checks use separate test student, staff, and admin accounts; try a staff account against another canteen; test invalid order transitions and five wrong pickup codes; verify a no-show blocks immediately and that payment must be recorded before staff can unblock. Use browser DevTools Network to inspect calls. Never copy tokens into tickets or chat.
 
 To add a backend unit test, add `*.test.js` under `server/test/`, use `node:test` and `node:assert`, and run `npm --prefix server test`.
+To add a client unit test, add `*.test.js` under `client/test/` and use the same built-in runner with `npm --prefix client test`.
 
 **Troubleshooting**
 | Problem | Likely cause | Fix |

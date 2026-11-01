@@ -70,7 +70,6 @@ exports.createItem = async (req, res, next) => {
     });
     res.status(201).json(item);
   } catch (err) {
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };
@@ -99,7 +98,6 @@ exports.updateItem = async (req, res, next) => {
     });
     res.json(item);
   } catch (err) {
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };

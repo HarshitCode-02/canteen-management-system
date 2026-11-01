@@ -8,6 +8,8 @@ The owner reports the current multi-canteen app is deployed on Vercel and workin
 
 The Phase 2 implementation adds owner-issued expiring QR pickup, verified reviews and admin moderation, deterministic budget/canteen/assistant tools, a static-only PWA offline shell, and admin audit history. See [the website tutorial](./docs/WEBSITE_TUTORIAL.md) for role-based use and [the Phase 2 final report](./docs/PHASE_2_FINAL_REPORT.md) for implementation details and remaining handover checks.
 
+Recent support/UI work adds responsive footer and public information pages, browser-aware PWA install guidance, optional administrator-managed canteen logo URLs, and shared client/server error sanitization.
+
 ## Safe working rules
 
 - Never request, print, or commit `.env` values, passwords, MongoDB URIs, JWTs, tokens, or API keys.
@@ -23,7 +25,7 @@ The Phase 2 implementation adds owner-issued expiring QR pickup, verified review
 - `server/`: Node.js, Express, MongoDB/Mongoose, JWT in an HttpOnly cookie, bcryptjs, CORS, Socket.IO and node-cron for long-running hosting.
 - `server/models/`: User, Canteen, MenuItem, Order, Counter, Review, AuditLog.
 - `server/controllers/`, `routes/`, `middleware/`: APIs and access control.
-- `server/test/`: built-in Node test runner (`node:test`).
+- `server/test/`, `client/test/`: built-in Node test runner (`node:test`).
 - `docs/`: phone test, staff guide, pilot, security route audit, go-live checklist.
 - `.github/workflows/ci.yml`: validation workflow; it does not deploy to Vercel.
 - Root and service-level Vercel config files describe routing/build behavior. Verify current Vercel project settings before changing deployment config.
@@ -57,9 +59,10 @@ Run from the repo root:
 npm --prefix server test
 npm --prefix client run lint
 npm --prefix client run build
+npm --prefix client test
 ```
 
-Latest local checks on the Phase 2 feature branch: `npm --prefix server test` passed 67 tests; client lint and production build passed. Backend tests are dependency-light and do not connect to production MongoDB. The client has no automated test runner yet. Full npm audits report moderate issues in development tooling; production-only audits report zero vulnerabilities. CI also checks backend JavaScript syntax and builds the development Docker images; it does not publish images or deploy. A green local build is not proof of live production behavior.
+Most recent local verification: client lint/build and all 4 client tests passed; the focused backend error/logo/assistant suites passed 11 tests. The full backend run passed 69 of 75 tests; 6 HTTP-listener tests could not bind to `0.0.0.0` because the sandbox denied `listen` with `EPERM`. Backend unit tests are dependency-light and do not connect to production MongoDB. Full npm audits report moderate issues in development tooling; production-only audits report zero vulnerabilities. CI also checks backend JavaScript syntax and builds development Docker images; it does not publish images or deploy. A green local build is not proof of live production behavior.
 
 ## Handover priorities
 

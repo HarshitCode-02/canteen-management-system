@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import api, { errorMessage } from "../api";
+import api, { errorMessage, errorMessages } from "../api";
 import { useCart } from "../context/CartContext";
 import MenuItemReviews from "../components/MenuItemReviews";
 
@@ -14,29 +14,41 @@ export default function CanteenMenu() {
   const [pendingItem, setPendingItem] = useState(null);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
+  const [reloadKey, setReloadKey] = useState(0);
 
 
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- show loading instead of the previous canteen's menu
     setLoading(true);
+    let active = true;
     setError("");
     setPendingItem(null);
     api
       .get(`/canteens/${id}/menu`)
       .then((res) => {
+        if (!res.data?.canteen || !Array.isArray(res.data.items)) {
+          throw new Error("The canteen menu returned an unexpected response");
+        }
+        if (!active) return;
         setCanteen(res.data.canteen);
         setMenu(res.data.items);
       })
-      .catch((err) => setError(errorMessage(err)))
-      .finally(() => setLoading(false));
-  }, [id]);
+      .catch((err) => {
+        if (active) setError(errorMessage(err, errorMessages.canteens));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [id, reloadKey]);
 
   if (loading) return <p className="center">Loading menu...</p>;
   if (error) {
     return (
       <div>
-        <p className="error">{error}</p>
+        <p className="error" role="alert">{error}</p>
+        <button type="button" onClick={() => setReloadKey((key) => key + 1)}>Try again</button>
         <Link to="/">← All canteens</Link>
       </div>
     );

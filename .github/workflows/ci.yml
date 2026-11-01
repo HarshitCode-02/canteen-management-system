@@ -31,13 +31,8 @@ jobs:
       - name: Install backend dependencies
         run: npm ci --prefix server
 
-      - name: Run frontend tests when configured
-        run: |
-          if node -e "process.exit(require('./client/package.json').scripts?.test ? 0 : 1)"; then
-            npm --prefix client run test
-          else
-            echo "::notice title=Frontend tests not configured::No frontend test script exists yet; frontend automated tests were not run."
-          fi
+      - name: Test frontend
+        run: npm --prefix client test
 
       - name: Test backend
         run: npm --prefix server test

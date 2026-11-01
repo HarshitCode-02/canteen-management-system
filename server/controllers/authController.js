@@ -33,7 +33,6 @@ exports.register = async (req, res, next) => {
     setAuthCookie(res, signToken(user));
     res.status(201).json({ user });
   } catch (err) {
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };
@@ -165,7 +164,6 @@ exports.updateProfile = async (req, res, next) => {
     res.json({ user });
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: "Email already registered" });
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };

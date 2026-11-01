@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import api, { errorMessage } from "../api";
+import api, { errorMessage, errorMessages } from "../api";
 
 export default function MealSuggestions() {
   const [budget, setBudget] = useState("");
@@ -39,9 +39,12 @@ export default function MealSuggestions() {
         budget: budgetValue,
         maxItems: maxItemsValue,
       });
-      setSuggestions(result.data.suggestions || []);
+      if (!Array.isArray(result.data?.suggestions)) {
+        throw new Error("Meal suggestions returned an unexpected response");
+      }
+      setSuggestions(result.data.suggestions);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, errorMessages.mealSuggestions));
       setSuggestions([]);
     } finally {
       setLoading(false);

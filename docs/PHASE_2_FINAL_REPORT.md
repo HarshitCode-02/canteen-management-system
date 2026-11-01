@@ -4,7 +4,7 @@
 
 Phase 2 extends the existing canteen pre-order app without replacing its MERN architecture or removing the four-digit pickup flow. It adds QR pickup, verified reviews, student/teacher Discover tools, a static-only offline shell, and an admin audit log, alongside UI and order-flow integration.
 
-The implementation was developed on `feature/campusbites-phase-2`, based on `origin/main` at `5f7cf92`. The report records code behavior and local checks; it does not claim that a real canteen pilot, live deployment validation, or physical-device test occurred.
+Phase 2 originated on `feature/campusbites-phase-2`, based on `origin/main` at `5f7cf92`. The report records code behavior and the checks run for that report; it does not claim that a real canteen pilot, live deployment validation, or physical-device test occurred.
 
 ## Features delivered and how they work
 
@@ -51,10 +51,16 @@ The implementation was developed on `feature/campusbites-phase-2`, based on `ori
 - Updated the root README, interview guide, project context/handover, client README, and security route audit.
 - Added Phase 2 implementation, test, and deployment reports/checklists.
 
+## Follow-up usability and error-handling work
+
+After the original Phase 2 report, the app gained a shared footer for public and student/teacher layouts, public help/payment/privacy/terms pages, browser-aware PWA installation guidance, and administrator-managed optional canteen logo URLs with a fallback. Client errors now have shared network/timeout/auth/server messaging and a React error boundary; backend Mongoose validation and unexpected server errors return sanitized messages. The existing canteen schema is reused, so no migration or upload service was added.
+
 ## Main implementation areas
 
 | Area | Files |
 |---|---|
+| Footer, public information, and PWA installation | `client/src/components/Footer.jsx`, `client/src/components/PublicLayout.jsx`, `client/src/pages/InfoPage.jsx`, `client/src/context/PwaInstallContext.jsx` |
+| Canteen logo and safe errors | `client/src/pages/CanteenList.jsx`, `client/src/pages/AdminPanel.jsx`, `client/src/apiErrors.js`, `server/utils/canteenLogo.js`, `server/middleware/errorHandler.js` |
 | QR and order lifecycle | `server/controllers/orderController.js`, `server/models/Order.js`, `server/routes/orderRoutes.js`, `server/noShow.js`, `client/src/components/PickupScanner.jsx`, `client/src/pages/MyOrders.jsx`, `client/src/pages/Dashboard.jsx` |
 | Reviews | `server/models/Review.js`, `server/controllers/reviewController.js`, `server/routes/reviewRoutes.js`, `client/src/components/ReviewForm.jsx`, `client/src/components/MenuItemReviews.jsx`, `client/src/pages/ReviewModeration.jsx` |
 | Discover tools | `server/controllers/smartController.js`, `server/services/mealSuggestions.js`, `server/routes/smartRoutes.js`, `client/src/pages/Discover.jsx`, Discover components |
@@ -62,7 +68,7 @@ The implementation was developed on `feature/campusbites-phase-2`, based on `ori
 | Audit log | `server/models/AuditLog.js`, `server/services/auditLog.js`, `server/controllers/auditController.js`, `server/middleware/requestId.js`, `server/routes/adminRoutes.js`, `client/src/pages/AdminAuditLogs.jsx` |
 | Documentation | `README.md`, `INTERVIEW.md`, `PROJECT_CONTEXT.md`, `project.md`, `docs/PHASE_2_*`, `docs/SECURITY-ROUTE-AUDIT.md`, `docs/WEBSITE_TUTORIAL.md` |
 
-## Verification run locally
+## Verification run for the original Phase 2 report
 
 Run these from the repository root.
 
@@ -78,7 +84,19 @@ Run these from the repository root.
 
 Full development dependency audits reported 6 moderate advisories in the client dependency tree and 2 moderate advisories in server development tooling (`minimatch` via ESLint/nodemon). No automatic or forced dependency update was applied.
 
-Backend tests are unit/controller tests with stubs; they do not connect to MongoDB. There is no frontend test runner. The local Docker Compose build was not verified because Docker Desktop's daemon was unavailable.
+Backend tests are unit/controller tests with stubs; they do not connect to MongoDB. At the time of this original report, the client had no automated test runner. The local Docker Compose build was not verified because Docker Desktop's daemon was unavailable.
+
+## Follow-up verification in the current workspace
+
+| Command | Result |
+|---|---|
+| `npm --prefix client run lint` | Passed |
+| `npm --prefix client run build` | Passed |
+| `npm --prefix client test` | 4 passed |
+| Focused server error/logo/assistant suites | 11 passed |
+| `npm --prefix server test` | 69 passed; 6 HTTP-listener tests were blocked because the sandbox denied binding to `0.0.0.0` (`EPERM`) |
+
+These are local code checks only. Browser viewport, PWA installation, production API connectivity, and real-device behavior were not verified.
 
 ## Production and handover checks still needed
 

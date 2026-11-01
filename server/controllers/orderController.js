@@ -293,7 +293,6 @@ exports.createOrder = async (req, res, next) => {
     if (err instanceof OrderRequestError) {
       return res.status(err.status).json({ message: err.message });
     }
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };

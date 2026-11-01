@@ -127,9 +127,11 @@ export default function Cart() {
         },
       });
     } catch (err) {
-      setError(err.response
-        ? errorMessage(err)
-        : err.message || "We couldn't confirm the order. Your cart is saved; check My Orders or retry safely.");
+      setError(errorMessage(err, {
+        fallback: "We couldn't complete your order. Your cart is saved. Check My Orders before retrying.",
+        network: "We couldn't complete your order. Your cart is saved. Check My Orders before retrying.",
+        timeout: "We couldn't confirm your order yet. Your cart is saved. Check My Orders before retrying.",
+      }));
       loadSlots(); // a slot may have just filled up
     } finally {
       setBusy(false);

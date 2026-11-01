@@ -51,6 +51,22 @@ async function connectToDatabase() {
   await databaseConnection;
 }
 
+app.get('/api/health', async (req, res) => {
+  try {
+    await connectToDatabase();
+    res.json({ status: "ok" });
+  } catch (err) {
+    console.error("Health check failed", {
+      requestId: req.requestId,
+      errorName: err.name || "Error",
+      ...(typeof err.code === "string" && /^[A-Z0-9_]{1,40}$/.test(err.code)
+        ? { errorCode: err.code }
+        : {}),
+    });
+    res.status(503).json({ status: "unavailable" });
+  }
+});
+
 app.use((req, res, next) => {
   const startedAt = process.hrtime.bigint();
   connectToDatabase().then(() => {
@@ -59,15 +75,6 @@ app.use((req, res, next) => {
   }, (err) => {
     req.dbWaitMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
     next(err);
-  });
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-  const databaseReady = mongoose.connection.readyState === 1;
-  res.status(databaseReady ? 200 : 503).json({
-    status: databaseReady ? 'OK' : 'UNAVAILABLE',
-    database: databaseReady ? 'connected' : 'disconnected',
   });
 });
 

@@ -45,7 +45,6 @@ exports.createReview = async (req, res, next) => {
     res.status(201).json(review);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: "You already reviewed this item for this order" });
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api, { errorMessage } from "../api";
 
-const EMPTY_CANTEEN = { name: "", location: "", description: "" };
+const EMPTY_CANTEEN = { name: "", location: "", description: "", logo: "" };
 const EMPTY_STAFF = { name: "", email: "", phone: "", password: "", canteenId: "" };
 const EMPTY_RESET = { email: "", newPassword: "" };
 
@@ -67,6 +67,7 @@ export default function AdminPanel() {
         name: canteenForm.name.trim(),
         location: canteenForm.location.trim(),
         description: canteenForm.description.trim(),
+        logo: canteenForm.logo.trim(),
       });
       setMessage(`Canteen "${res.data.name}" created. Now create its owner login below.`);
       setCanteenForm(EMPTY_CANTEEN);
@@ -225,6 +226,15 @@ export default function AdminPanel() {
         <label className="field">
           Description
           <input value={canteenForm.description} onChange={(e) => setCanteenForm({ ...canteenForm, description: e.target.value })} />
+        </label>
+        <label className="field">
+          Logo URL (optional, HTTP or HTTPS)
+          <input
+            type="url"
+            value={canteenForm.logo}
+            placeholder="https://example.com/canteen-logo.png"
+            onChange={(e) => setCanteenForm({ ...canteenForm, logo: e.target.value })}
+          />
         </label>
         <button type="submit" disabled={busy === "canteen"}>
           {busy === "canteen" ? "Creating..." : "Create canteen"}

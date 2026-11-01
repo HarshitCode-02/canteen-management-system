@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { errorMessage } from "../api";
+import { errorMessage, errorMessages } from "../api";
 
 export default function Login() {
   const { login } = useAuth();
@@ -20,7 +20,7 @@ export default function Login() {
       const u = await login(email, password);
       navigate(u.role === "canteen" || u.role === "admin" ? "/dashboard" : "/");
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, errorMessages.login));
     } finally {
       setBusy(false);
     }
@@ -29,7 +29,7 @@ export default function Login() {
   return (
     <div className="card">
       <h2>Login</h2>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       <form onSubmit={handleSubmit}>
         <input type="email" placeholder="Email" value={email}
           onChange={(e) => setEmail(e.target.value)} required />

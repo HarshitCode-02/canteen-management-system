@@ -65,7 +65,6 @@ exports.createStaff = async (req, res, next) => {
     });
     res.status(201).json(user);
   } catch (err) {
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };

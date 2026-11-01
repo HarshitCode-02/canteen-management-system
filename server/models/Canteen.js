@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const canteenSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  logo: { type: String, default: "" },
+  logo: { type: String, default: "", trim: true, maxlength: 2048 },
   description: { type: String, default: "", trim: true },
   location: { type: String, default: "", trim: true },
   isOpen: { type: Boolean, default: true },

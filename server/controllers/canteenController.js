@@ -8,6 +8,7 @@ const Order = require("../models/Order");
 const { emitToUser } = require("../socket");
 const { loadVisibleRatings } = require("../services/reviewRatings");
 const { writeAudit } = require("../services/auditLog");
+const { isValidCanteenLogo } = require("../utils/canteenLogo");
 
 
 
@@ -114,6 +115,9 @@ exports.createCanteen = async (req, res, next) => {
       return res.status(400).json({ message: "name is required" });
     }
     const data = pick(req.body);
+    if (data.logo !== undefined && !isValidCanteenLogo(data.logo)) {
+      return res.status(400).json({ message: "Logo must be an HTTP or HTTPS image URL no longer than 2048 characters" });
+    }
     data.slug = slugify(data.slug || name);
     if (!data.slug) return res.status(400).json({ message: "Could not create a valid slug" });
 
@@ -128,7 +132,6 @@ exports.createCanteen = async (req, res, next) => {
     res.status(201).json(canteen);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: "A canteen with this slug already exists" });
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };
@@ -140,6 +143,9 @@ exports.updateCanteen = async (req, res, next) => {
       return res.status(400).json({ message: "Invalid canteen id" });
     }
     const data = pick(req.body);
+    if (data.logo !== undefined && !isValidCanteenLogo(data.logo)) {
+      return res.status(400).json({ message: "Logo must be an HTTP or HTTPS image URL no longer than 2048 characters" });
+    }
     if (data.slug !== undefined) data.slug = slugify(data.slug);
 
     const canteen = await Canteen.findByIdAndUpdate(req.params.id, data, {
@@ -157,7 +163,6 @@ exports.updateCanteen = async (req, res, next) => {
     res.json(canteen);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: "A canteen with this slug already exists" });
-    if (err.name === "ValidationError") return res.status(400).json({ message: err.message });
     next(err);
   }
 };

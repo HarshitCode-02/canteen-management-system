@@ -1,8 +1,17 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import CanteenAssistant from "../components/CanteenAssistant";
 import CanteenCompare from "../components/CanteenCompare";
 import MealSuggestions from "../components/MealSuggestions";
 
 export default function Discover() {
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [hash]);
+
   return (
     <div className="discover-page">
       <header className="discover-hero">

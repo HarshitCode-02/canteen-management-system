@@ -35,11 +35,17 @@ You must sign in to browse the canteens and use the app. A new public registrati
 
 The login is an HttpOnly-cookie session. Do not look for or copy a token from browser storage. If the site says your session is missing, sign in again using the correct website address and ask the administrator to check the deployment if it continues.
 
+## Help, contact, and install options
+
+The shared page footer links to ordering and pickup instructions, FAQs, payment information, contact support, privacy, and terms. Use the support email shown there for account or order questions; include an order number when relevant, but never send passwords, pickup codes, cookies, or payment credentials.
+
+On supported browsers, choose **Install CampusBites** to use the browser's install prompt. On iPhone or iPad, open the site in Safari, use **Share**, then choose **Add to Home Screen**. Availability depends on browser and device; installing is optional.
+
 ## Student and teacher: browse, order, and collect
 
 ### Find food and place an order
 
-1. Sign in. The home page shows active canteens.
+1. Sign in. The home page shows active canteens, their open/closed state, and optional canteen images. If an image is unavailable, the card displays the CampusBites fallback.
 2. Open a canteen to see its menu, prices, availability, categories, and any visible review ratings.
 3. Add items to your cart. The cart holds items for one canteen at a time; switching canteens may replace the existing cart.
 4. Open **Cart**, check quantities and the total, select an available pickup time, and optionally add a short note.
@@ -106,6 +112,7 @@ Administrator access is for the designated project/college administrator.
 
 1. Sign in with the provisioned administrator account; public registration cannot create an administrator.
 2. Open **Admin** to create and edit canteens, set availability, create canteen accounts, assign canteens, review blocked student/teacher accounts, and manage password resets.
+   - A canteen can have an optional administrator-managed logo URL. Use a publicly reachable image URL (HTTPS recommended); image upload is not provided. Clear the URL to use the default CampusBites card image.
 3. Create the canteen record first, then create its owner/staff login and assign the correct canteen. Share the temporary sign-in details privately and ask the owner to change their password.
 4. Use **Review moderation** to inspect reviews and hide or restore them. Hidden reviews do not contribute to public ratings.
 5. Use **Audit log** to filter and review recorded order, payment, menu, canteen, staff-account, no-show block/unblock, password-reset, and review-moderation actions. The log is not a payment ledger.
@@ -119,7 +126,7 @@ The administrator should provision or remove accounts carefully, avoid sharing s
 - QR pickup is a convenience; the four-digit code remains an alternate pickup method. Staff still need to verify the server response.
 - The website can show an offline message and cache static files, but it does not cache private order/account information or submit/queue orders offline. Reconnect before placing an order or changing account/order data.
 - On the Vercel deployment, the interface uses polling rather than persistent Socket.IO updates. Refresh if an update appears delayed.
-- If the app shows an authorization or network error, check the internet connection, sign in again, and contact the administrator with the approximate time and page. Do not send passwords, cookies, or tokens.
+- If the app shows an authorization or network error, check the internet connection, sign in again, and contact the administrator with the approximate time and page. Messages are designed to avoid showing internal server details. Do not send passwords, cookies, or tokens.
 
 ## Quick role checklist
 

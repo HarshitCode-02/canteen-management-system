@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
+import PublicLayout from "./components/PublicLayout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import CanteenList from "./pages/CanteenList";
@@ -16,16 +17,27 @@ import AccountSettings from "./pages/AccountSettings";
 import Discover from "./pages/Discover";
 import ReviewModeration from "./pages/ReviewModeration";
 import AdminAuditLogs from "./pages/AdminAuditLogs";
+import InfoPage from "./pages/InfoPage";
 
 
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route element={<PublicLayout />}>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/help/how-to-order" element={<InfoPage />} />
+        <Route path="/help/pickup" element={<InfoPage />} />
+        <Route path="/help/faq" element={<InfoPage />} />
+        <Route path="/contact" element={<InfoPage />} />
+        <Route path="/privacy" element={<InfoPage />} />
+        <Route path="/terms" element={<InfoPage />} />
+        <Route path="/payment-info" element={<InfoPage />} />
+      </Route>
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/" element={<CanteenList />} />
+        <Route path="/canteens" element={<CanteenList />} />
         <Route path="/canteen/:id" element={<CanteenMenu />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/orders" element={<MyOrders />} />

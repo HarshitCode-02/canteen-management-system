@@ -14,7 +14,7 @@ const response = () => ({
   },
 });
 
-test("production 500 responses hide internal messages and logs omit error details", (t) => {
+test("500 responses in production hide internal messages and logs omit error details", (t) => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalConsoleError = console.error;
   let logArgs;
@@ -35,11 +35,51 @@ test("production 500 responses hide internal messages and logs omit error detail
   );
 
   assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { message: "Server error" });
+  assert.deepEqual(res.body, { message: "Something went wrong. Please try again." });
   assert.deepEqual(logArgs, [
     "Request failed",
     { requestId: "request-123", method: "GET", path: "/api/orders", status: 500, errorName: "Error" },
   ]);
+});
+
+test("development 500 responses also hide internal messages from users", (t) => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalConsoleError = console.error;
+  t.after(() => {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+    console.error = originalConsoleError;
+  });
+  process.env.NODE_ENV = "development";
+  console.error = () => {};
+  const res = response();
+
+  errorHandler(
+    new Error("Cannot read properties of undefined"),
+    { method: "GET", path: "/api/reviews" },
+    res,
+    (err) => { throw err; }
+  );
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, { message: "Something went wrong. Please try again." });
+});
+
+test("Mongoose validation errors return a safe client message", (t) => {
+  const originalConsoleError = console.error;
+  t.after(() => { console.error = originalConsoleError; });
+  console.error = () => {};
+  const res = response();
+
+  errorHandler(
+    Object.assign(new Error("Canteen validation failed: logo: Cast to string failed"), { name: "ValidationError" }),
+    { method: "PATCH", path: "/api/canteens/123", requestId: "request-456" },
+    res,
+    (err) => { throw err; }
+  );
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { message: "Please check the information you entered and try again." });
 });
 
 test("known client errors retain their safe message", (t) => {

@@ -21,6 +21,8 @@ BBDU college canteen pre-order platform: users choose a canteen, browse its menu
 
 I build this alone. The owner reports the product is deployed and working on Vercel, with a canteen handover planned. Do not claim real-device coverage, completed training, a successful pilot, or actual real-user usage unless verified.
 
+Recent support/UI work adds a responsive footer and public help/payment/privacy/terms pages, browser-aware PWA install guidance, optional administrator-managed canteen logo URLs, and shared client/server error sanitization.
+
 ## How to work with me / reply format
 
 For a feature chunk, briefly use this format:
@@ -41,19 +43,20 @@ Ask before a significant behavior/design choice or dependency. Do not claim comp
 - `client/`: React JSX, Vite, React Router, Axios, Socket.IO client, plain CSS.
 - `server/`: Node.js, Express, MongoDB Atlas M0, Mongoose, JWT, bcryptjs, dotenv, CORS, Socket.IO, node-cron; CommonJS.
 - Server port defaults to 5001; `CLIENT_URL` is the server's allowed frontend origin list. Set it in Vercel server environment settings, not in source. `client/vercel.json` forwards frontend-origin `/api/*` requests to the backend deployment; keep its destination aligned with the actual API host. The root `vercel.json` instead defines Vercel multi-service routing. `VITE_API_URL` overrides the same-origin path; direct cross-origin calls require verified cookie/CORS settings. Confirm the active Vercel project root before changing configs. Auth is an HttpOnly cookie; Vercel builds disable Socket.IO and use existing 30-second polling.
-- Backend uses Node's built-in `node:test` (67 passing tests in the latest local run). No frontend test runner is configured.
+- Backend and client use Node's built-in `node:test`; run the current suites instead of relying on saved test totals.
 - Helmet and express-rate-limit are installed with the user's approval; limits cover login, registration, and failed pickup-code verification.
 
 ## Folder layout
 
 ```text
-client/src/  App.jsx, api.js, socket.js, sound.js, useStaffCanteen.js
-  components/ Layout, Navbar, ProtectedRoute, CanteenSwitcher
-  context/    AuthContext, CartContext
+client/src/  App.jsx, api.js, apiErrors.js, socket.js, sound.js, useStaffCanteen.js
+  components/ Layout, PublicLayout, Footer, ErrorBoundary, Navbar, ProtectedRoute, CanteenSwitcher
+  context/    AuthContext, CartContext, PwaInstallContext
   pages/      Login, Register, CanteenList, CanteenMenu, Cart, MyOrders,
               Dashboard, ManageMenu, AdminPanel, BlockedStudents,
-              SalesReport, AccountSettings, Discover, ReviewModeration,
+              SalesReport, AccountSettings, Discover, InfoPage, ReviewModeration,
               AdminAuditLogs
+client/test/  API error classification tests
 server/       server.js, socket.js, slots.js, noShow.js, seed.js,
               migrate-multi-canteen.js, makeAdmin.js
   models/     User, Canteen, MenuItem, Order, Counter, Review, AuditLog
@@ -71,7 +74,7 @@ vercel.json, client/vercel.json, server/index.js
 
 ## Client routes
 
-- Public: `/login`, `/register`.
+- Public: `/login`, `/register`, help/contact/privacy/terms/payment information.
 - Authenticated student/teacher: `/`, `/canteen/:id`, `/cart`, `/orders`, `/account` (view/edit profile and change password).
 - Canteen staff/admin: `/dashboard`, `/manage-menu`, `/blocked`, `/report`.
 - Admin only: `/admin`.
@@ -92,7 +95,7 @@ vercel.json, client/vercel.json, server/index.js
 
 ## Conventions and security
 
-- JSON API; errors `{ "message": "..." }` with appropriate HTTP status.
+- JSON API; errors `{ "message": "..." }` with appropriate HTTP status. Mongoose validation and unexpected server errors use centralized safe messages.
 - Auth uses a JWT in an HttpOnly cookie; unsafe browser requests must have an allowed Origin. HTTP and Socket.IO use the cookie; `protect` reloads the user each request and password changes/resets invalidate old sessions. If frontend and API are on separate Vercel domains, verify browser cookie behavior; same-origin routing/proxying is preferable.
 - Roles: `student`, `teacher`, `canteen`, `admin`. Registration creates the default student role; never allow self-assigned privileged roles.
 - `middleware/auth.js` exports `protect`, `authorize(...roles)`, and `canManageCanteen(user, canteenId)`. Admin can manage all; staff only assigned canteens. Check ownership on every relevant server action.
@@ -136,7 +139,8 @@ vercel.json, client/vercel.json, server/index.js
 - Day 22: login/register per-IP rate limits, failed pickup-code throttling, Helmet, HttpOnly cookie sessions, unsafe-request Origin checks, sanitized production errors, a 100 KB JSON body cap, transactional order/no-show updates, and order quantity caps are implemented. Limits on other routes and broader validation remain **not implemented**.
 - Day 23: basic responsive/touch CSS changes exist; real-phone verification is still pending.
 - Phase 2 code: atomic QR pickup, verified reviews/moderation, deterministic Discover tools, static-only PWA offline shell, and admin audit log.
-- Backend suite has 67 dependency-light tests; client lint/build pass locally, but the client has no automated test runner. These do not prove full DB-backed, real-device, or live deployment behavior.
+- Recent UI/support work: shared responsive footer and public information pages; optional canteen logo URLs with a fallback; PWA install guidance; safe API/network error handling and a React error boundary.
+- Backend suite includes dependency-light unit tests; the client has a small `node:test` suite plus lint/build. These do not prove full DB-backed, real-device, or live deployment behavior.
 - Dockerfiles and Compose support local development. GitHub Actions validates, tests, lints, builds, and builds Docker images; it does not deploy. The owner reports Vercel deployment is working; verify live environment and scheduler settings before handover.
 
 ## Remaining work plan (status is honest)

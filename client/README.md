@@ -12,8 +12,9 @@ Run from the repository root:
 npm --prefix client run dev
 npm --prefix client run lint
 npm --prefix client run build
+npm --prefix client test
 ```
 
-There is no frontend automated test runner configured; `lint` and `build` are the current automated client checks.
+Client unit tests use Node's built-in `node:test` runner; add `*.test.js` files under `client/test/`.
 
 For local API configuration, copy `client/.env.example` to `client/.env` and set `VITE_API_URL` to your local server's `/api` base URL. Never commit `.env` files.

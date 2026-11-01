@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import api, { errorMessage } from "../api";
+import api, { errorMessage, errorMessages } from "../api";
 
 const EXAMPLES = [
   "Which canteen sells paneer sandwiches?",
@@ -30,6 +30,9 @@ export default function CanteenAssistant() {
     setLoading(true);
     try {
       const result = await api.post("/smart/assistant", { message: question });
+      if (typeof result.data?.reply !== "string") {
+        throw new Error("The assistant returned an unexpected response");
+      }
       setMessages((current) => [...current, {
         role: "assistant",
         text: result.data.reply,
@@ -38,7 +41,8 @@ export default function CanteenAssistant() {
         canteens: result.data.canteens || [],
       }]);
     } catch (err) {
-      setError(errorMessage(err));
+      setInput(question);
+      setError(errorMessage(err, errorMessages.assistant));
     } finally {
       setLoading(false);
     }

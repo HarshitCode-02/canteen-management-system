@@ -1,5 +1,5 @@
 import { useState } from "react";
-import api, { errorMessage } from "../api";
+import api, { errorMessage, errorMessages } from "../api";
 
 export default function MenuItemReviews({ itemId }) {
   const [visible, setVisible] = useState(false);
@@ -11,16 +11,24 @@ export default function MenuItemReviews({ itemId }) {
   const [error, setError] = useState("");
 
   const loadReviews = async (nextPage) => {
+    if (loading) return;
     setError("");
     setLoading(true);
     try {
       const result = await api.get(`/reviews/menu/${itemId}`, { params: { page: nextPage } });
+      if (
+        !Array.isArray(result.data?.reviews)
+        || !Number.isInteger(result.data.page)
+        || !Number.isFinite(result.data.total)
+      ) {
+        throw new Error("Reviews returned an unexpected response");
+      }
       setReviews((current) => nextPage === 1 ? result.data.reviews : [...current, ...result.data.reviews]);
       setPage(result.data.page);
       setTotal(result.data.total);
       setLoaded(true);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, errorMessages.reviews));
     } finally {
       setLoading(false);
     }
@@ -40,8 +48,8 @@ export default function MenuItemReviews({ itemId }) {
       </button>
       {visible && error && <p className="error" role="alert">{error}</p>}
       {visible && loaded && reviews.length === 0 && <p className="muted">No reviews yet.</p>}
-      {visible && error && !loaded && (
-        <button type="button" className="small link-button" onClick={() => loadReviews(1)} disabled={loading}>
+      {visible && error && (
+        <button type="button" className="small link-button" onClick={() => loadReviews(loaded ? page + 1 : 1)} disabled={loading}>
           Try again
         </button>
       )}
